@@ -100,3 +100,10 @@ No production merge or release until the applicable gates are verified. A CI-gen
 - Verify the managed running process and AVD identity before every interactive command without repeatedly collecting network addresses. Bound individual capture and input commands to three seconds; skip screen requests when the desktop controller is busy.
 - Provide explicit volume and power controls underneath the three navigation buttons. Test the key allowlist and exercise volume on disposable Android guests in the real smoke gate.
 - The screenshot polling interval is not a measured frame rate; real-host responsiveness and simultaneous guest capacity remain unverified.
+
+## M4.3 — multi-device workspace and Google Play images
+
+- New Android profiles require an installed official Google Play system image; legacy profiles remain bootable and untouched. The runtime installer uses the official Android 14 Google Play package matching the host architecture. No unofficial APKs or redistribution.
+- Up to four independently controlled phone panels can be opened in the main workspace; only one bounded screenshot capture is in flight across the panels. This is adaptive screenshot refresh, not encoded video streaming.
+- The installed-app check queries exact package names on the selected managed device. YouTube is not guaranteed by all official images; missing apps are reported, never silently sideloaded. The real smoke test requires both packages on each of two disposable guests before claiming that the image fulfills the requirement.
+- Actual guest boot, both Google apps, concurrent display performance and video streaming remain verification/development gates.

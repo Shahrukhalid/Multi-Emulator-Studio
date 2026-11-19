@@ -130,6 +130,9 @@ impl<E: Engine> Manager<E> {
     pub fn screen(&mut self, id: Uuid) -> Result<crate::runtime::ScreenFrame> {
         self.engine.screen(&self.store.get(id)?)
     }
+    pub fn google_apps(&mut self, id: Uuid) -> Result<crate::runtime::GoogleApps> {
+        self.engine.google_apps(&self.store.get(id)?)
+    }
     pub fn navigate(&mut self, id: Uuid, key: crate::runtime::NavigationKey) -> Result<()> {
         self.engine.navigate(&self.store.get(id)?, key)
     }

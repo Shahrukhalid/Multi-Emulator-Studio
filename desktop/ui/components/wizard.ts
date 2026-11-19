@@ -147,7 +147,7 @@ export class WizardComponent {
             <select class="form-select-input" id="wiz-os-select">
               ${versionOptions}
             </select>
-            <span class="form-helper-text">Only installed, compatible Android system images are available.</span>
+    <span class="form-helper-text">Official Google Play images include Play Store; YouTube availability is checked after boot.</span>
           </div>
 
           <!-- Step 4: Configuration -->

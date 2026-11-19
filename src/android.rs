@@ -369,7 +369,7 @@ pub fn install_runtime(root: &Path) -> Result<Sdk> {
         "x86_64" => "x86_64",
         _ => return Err(Error::Unavailable("unsupported CPU".into())),
     };
-    let image = format!("system-images;android-34;google_apis;{abi}");
+    let image = format!("system-images;android-34;google_apis_playstore;{abi}");
     run(
         Command::new(manager)
             .env("ANDROID_HOME", &root)
@@ -616,6 +616,11 @@ impl Android {
 impl Engine for Android {
     fn create(&mut self, d: &Device) -> Result<()> {
         d.spec.validate()?;
+        if d.spec.image.split(';').nth(2) != Some("google_apis_playstore") {
+            return Err(Error::Invalid(
+                "New Android devices require an official Google Play system image".into(),
+            ));
+        }
         self.check_disk(u64::from(d.spec.disk_mb))?;
         if !self.sdk.images()?.contains(&d.spec.image) {
             return Err(Error::Unavailable(
@@ -962,6 +967,15 @@ impl Engine for Android {
     fn screen(&mut self, d: &Device) -> Result<ScreenFrame> {
         let port = self.interactive_port(d)?;
         capture_png(self.adb_for(port).args(["exec-out", "screencap", "-p"]))
+    }
+    fn google_apps(&mut self, d: &Device) -> Result<crate::runtime::GoogleApps> {
+        let port = self.interactive_port(d)?;
+        let packages = run(
+            self.adb_for(port).args(["shell", "pm", "list", "packages"]),
+            None,
+            SHORT,
+        )?;
+        Ok(crate::runtime::GoogleApps::from_packages(&packages))
     }
     fn navigate(&mut self, d: &Device, key: NavigationKey) -> Result<()> {
         let key = match key {

@@ -203,7 +203,7 @@ export class SettingsComponent {
             Install the official Android SDK command-line tools and a supported Java runtime first. Open Android Studio's SDK Manager, install Android Emulator, Android SDK Platform-Tools, and an Android system image matching your computer's CPU (ARM64 on Apple Silicon or x86_64 on supported Intel/AMD PCs). Review the license terms personally. If using command-line tools, review the licenses with:
           </p>
           <pre style="background: var(--bg-app); padding: 8px 12px; border-radius: 4px; border: 1px solid var(--border-subtle); font-family: var(--font-mono); margin-top: 6px; font-size: 11px;">sdkmanager --licenses</pre>
-          <p style="color: var(--text-secondary);">Enter the existing command-line tools SDK directory above. After personally accepting the package licenses, select Install Android runtime to download the emulator, platform tools and Android 14 image for your CPU. If already connected, use the official SDK Manager and then Check Toolchain.</p>
+          <p style="color: var(--text-secondary);">Enter the existing command-line tools SDK directory above. After personally accepting the package licenses, select Install Android runtime to download the emulator, platform tools and Android 14 Google Play image for your CPU. If already connected, install a Google Play image in the official SDK Manager and then Check Toolchain.</p>
           <label style="display:block; margin-top:12px;">
             <input type="checkbox" id="runtime-license-confirm" ${this.connected || this.installing ? 'disabled' : ''} />
             I have reviewed and accepted the required SDK licenses using the official SDK Manager.

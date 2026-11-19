@@ -1,5 +1,5 @@
 import { getApiClient, IApiClient } from './api.js';
-import { Device, Status, HostInfo, SdkInfo, NetworkReport, DeviceSpec, DevicePreset, RuntimePreflight } from './types.js';
+import { Device, Status, HostInfo, SdkInfo, NetworkReport, DeviceSpec, DevicePreset, RuntimePreflight, isGooglePlayImage } from './types.js';
 import { HeaderComponent, MainNavTab } from './components/header.js';
 import { WelcomeComponent } from './components/welcome.js';
 import { DeviceListComponent } from './components/device_list.js';
@@ -26,6 +26,8 @@ export class App {
   private modalCleanup: (() => void) | null = null;
   private modalKey: ((event: KeyboardEvent) => void) | null = null;
   private pollInterval: number | null = null;
+  private phoneDock = document.createElement('section');
+  private phones = new Map<string, PhoneViewer>();
 
   private devices: Device[] = [];
   private statuses: Status[] = [];
@@ -291,9 +293,18 @@ export class App {
 
   private handleOpen(device: Device): void {
     if (this.api.isPreview) { toast.show('Live screen requires the native app', 'warning'); return; }
-    const viewer = new PhoneViewer(this.api, device, () => this.closeModal());
-    this.openModal(viewer.element, () => viewer.dispose());
+    const existing = this.phones.get(device.id);
+    if (existing) { existing.element.scrollIntoView({ block: 'nearest' }); return; }
+    if (this.phones.size >= 4) { toast.show('Close a phone view before opening another (four visible screens maximum).', 'warning'); return; }
+    const viewer = new PhoneViewer(this.api, device, () => {
+      viewer.dispose(); viewer.element.remove(); this.phones.delete(device.id);
+      this.phoneDock.hidden = this.phones.size === 0;
+    });
+    this.phones.set(device.id, viewer);
+    this.phoneDock.appendChild(viewer.element);
+    this.phoneDock.hidden = false;
     viewer.begin();
+    viewer.element.scrollIntoView({ block: 'nearest' });
   }
 
   private async handleStop(device: Device): Promise<void> {
@@ -382,8 +393,9 @@ export class App {
   }
 
   private openWizard(initialPreset?: DevicePreset): void {
-    if (!this.api.isPreview && (!this.isConnected || !this.images.length || !this.hardwareProfiles.length)) {
-      toast.show('Connect the official Android SDK and install a compatible system image before creating a device.', 'warning');
+    const playImages = this.images.filter(isGooglePlayImage);
+    if (!this.api.isPreview && (!this.isConnected || !playImages.length || !this.hardwareProfiles.length)) {
+      toast.show('Install a compatible Google Play system image in the official Android SDK Manager, then Check Toolchain.', 'warning');
       this.switchTab('settings');
       return;
     }
@@ -393,7 +405,7 @@ export class App {
       return;
     }
     const modal = new WizardComponent(
-      this.images,
+      playImages,
       this.hardwareProfiles,
       this.host,
       {
@@ -447,6 +459,10 @@ export class App {
     contentContainer.id = 'content-slot';
 
     this.rootElement.appendChild(contentContainer);
+    this.phoneDock.className = 'phone-dock';
+    this.phoneDock.setAttribute('aria-label', 'Open Android devices');
+    this.phoneDock.hidden = true;
+    this.rootElement.appendChild(this.phoneDock);
     this.switchTab('devices');
   }
 }

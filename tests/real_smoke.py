@@ -45,8 +45,8 @@ def main():
         print("RUNTIME PREFLIGHT", preflight, flush=True)
         if not preflight["ready"]:
             raise RuntimeError(preflight["diagnostic"])
-        image=next((i for i in call("images") if "android-34" in i),None)
-        if not image: raise RuntimeError("no Android 14 image installed")
+        image=next((i for i in call("images") if ";android-34;google_apis_playstore;" in i),None)
+        if not image: raise RuntimeError("no Android 14 Google Play image installed")
         apk = build_fixture(sdk, root / "fixture")
         spec=dict(name="Smoke A",image=image,hardware_profile="pixel_6",ram_mb=2048,cores=2,width=720,height=1280,disk_mb=2048,locale="en-US",graphics_mode=args.graphics)
         for name in ("Smoke A","Smoke B"):
@@ -72,6 +72,9 @@ def main():
             frame = call("screen", id=device_id)
             assert frame["width"] > 0 and frame["height"] > 0
             assert base64.b64decode(frame["png_base64"], validate=True).startswith(b"\x89PNG\r\n\x1a\n")
+            apps = call("google_apps", id=device_id)
+            assert apps["play_store"], "Play Store missing from Google Play image"
+            assert apps["youtube"], "YouTube missing from Google Play image; install via official store before certifying this image"
             call("navigate", id=device_id, key="home")
             call("navigate", id=device_id, key="volume_up")
             call("navigate", id=device_id, key="volume_down")

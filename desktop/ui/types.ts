@@ -62,6 +62,8 @@ export interface RuntimePreflight {
 }
 
 export interface ScreenFrame { png_base64: string; width: number; height: number; }
+export interface GoogleApps { play_store: boolean; youtube: boolean; }
+export function isGooglePlayImage(image: string): boolean { return image.split(';')[2] === 'google_apis_playstore'; }
 export type NavigationKey = 'back' | 'home' | 'recents' | 'volume_up' | 'volume_down' | 'power';
 export type TouchInput = { kind: 'tap'; x: number; y: number } | { kind: 'swipe'; x: number; y: number; end_x: number; end_y: number };
 
@@ -90,6 +92,7 @@ export type Request =
   | { action: 'emulator_version' }
   | { action: 'runtime_preflight' }
   | { action: 'screen'; id: string }
+  | { action: 'google_apps'; id: string }
   | { action: 'navigate'; id: string; key: NavigationKey }
   | { action: 'touch'; id: string; input: TouchInput }
   | { action: 'list' }
@@ -127,7 +130,7 @@ export function parseFriendlyVersion(image: string): FriendlyVersion {
     const apiStr = parts[1].replace('android-', '');
     apiLevel = parseInt(apiStr, 10) || 34;
     abi = parts[3];
-    tag = parts[2].replace(/_/g, ' ');
+    tag = isGooglePlayImage(image) ? 'Google Play' : parts[2].replace(/_/g, ' ');
 
     const versionMap: Record<number, string> = {
       35: 'Android 15',

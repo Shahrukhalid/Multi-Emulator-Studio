@@ -1,7 +1,9 @@
 import { IApiClient } from '../api.js';
-import { Device, NavigationKey, ScreenFrame, TouchInput } from '../types.js';
+import { Device, GoogleApps, NavigationKey, ScreenFrame, TouchInput } from '../types.js';
 
 export class PhoneViewer {
+  // One bounded capture at a time across the entire local workspace.
+  private static captureActive = false;
   readonly element = document.createElement('div');
   private closed = false;
   private timer: number | null = null;
@@ -10,14 +12,15 @@ export class PhoneViewer {
   private capturing = false;
   private failures = 0;
   private terminal = false;
+  private checkedApps = false;
   private start: { x: number; y: number; width: number; height: number } | null = null;
   private visibilityChanged = () => this.schedule(0);
 
   constructor(private api: IApiClient, private device: Device, onClose: () => void) {
-    this.element.className = 'modal-backdrop';
-    this.element.innerHTML = `<section class="modal-window phone-viewer" role="dialog" aria-label="Android device screen">
-      <header class="modal-title-bar"><h2 id="phone-title"></h2><button class="btn-overflow-menu" id="phone-close" aria-label="Close">×</button></header>
-      <div class="phone-display"><p id="phone-status" role="status">Waiting for Android…</p><img id="phone-frame" alt="Live Android screen" draggable="false" hidden /></div>
+    this.element.className = 'phone-panel';
+    this.element.innerHTML = `<section class="phone-viewer" role="region" aria-label="Android device screen">
+      <header class="modal-title-bar"><h2 class="phone-title"></h2><button class="btn-overflow-menu phone-close" aria-label="Close">×</button></header>
+      <div class="phone-display"><p class="phone-status" role="status">Waiting for Android…</p><img class="phone-frame" alt="Live Android screen" draggable="false" hidden /></div>
       <nav class="phone-navigation" aria-label="Android navigation">
         <button data-key="back" aria-label="Back" title="Back" disabled>◁</button>
         <button data-key="home" aria-label="Home" title="Home" disabled>○</button>
@@ -26,11 +29,12 @@ export class PhoneViewer {
         <button data-key="volume_down" disabled>Volume −</button>
         <button data-key="volume_up" disabled>Volume +</button>
         <button data-key="power" disabled>Power</button>
-      </div><p class="phone-viewer-note" role="status">Local screen refresh · click to tap, drag to swipe</p>
+      </div><button class="phone-app-check" disabled>Check Play Store &amp; YouTube</button><p class="phone-app-status" role="status"></p><p class="phone-viewer-note" role="status">Local screen refresh · click to tap, drag to swipe</p>
     </section>`;
-    this.element.querySelector('#phone-title')!.textContent = device.spec.name;
-    this.element.querySelector('#phone-close')!.addEventListener('click', onClose);
-    const image = this.element.querySelector('#phone-frame') as HTMLImageElement;
+    this.element.querySelector('.phone-title')!.textContent = device.spec.name;
+    this.element.querySelector('.phone-close')!.addEventListener('click', onClose);
+    this.element.querySelector('.phone-app-check')!.addEventListener('click', () => void this.checkApps());
+    const image = this.element.querySelector('.phone-frame') as HTMLImageElement;
     image.addEventListener('pointerdown', e => {
       if (!this.frame || this.busy || e.button !== 0) return;
       this.start = { ...this.point(e, image), width: this.frame.width, height: this.frame.height };
@@ -75,6 +79,20 @@ export class PhoneViewer {
     this.element.querySelectorAll<HTMLButtonElement>('[data-key]').forEach(b => {
       b.disabled = !this.frame || this.busy;
     });
+    (this.element.querySelector('.phone-app-check') as HTMLButtonElement).disabled = !this.frame || this.busy;
+  }
+
+  private async checkApps(): Promise<void> {
+    if (!this.frame || this.busy || this.closed) return;
+    this.busy = true;
+    this.updateControls();
+    const status = this.element.querySelector('.phone-app-status')!;
+    status.textContent = 'Checking installed apps…';
+    try {
+      const apps = await this.api.dispatch<GoogleApps>({ action: 'google_apps', id: this.device.id });
+      status.textContent = `Play Store: ${apps.play_store ? 'installed' : 'missing'} · YouTube: ${apps.youtube ? 'installed' : 'missing — install via Play Store'}`;
+    } catch { status.textContent = 'App check failed; try again after Android is ready.'; }
+    finally { this.busy = false; this.updateControls(); this.schedule(0); }
   }
 
   private point(e: PointerEvent, image: HTMLImageElement): { x: number; y: number } {
@@ -96,9 +114,11 @@ export class PhoneViewer {
 
   private async refresh(): Promise<void> {
     if (this.closed || this.terminal || this.capturing || this.busy || document.hidden) return;
+    if (PhoneViewer.captureActive) { this.schedule(100); return; }
+    PhoneViewer.captureActive = true;
     this.capturing = true;
-    const status = this.element.querySelector('#phone-status')!;
-    const image = this.element.querySelector('#phone-frame') as HTMLImageElement;
+    const status = this.element.querySelector('.phone-status')!;
+    const image = this.element.querySelector('.phone-frame') as HTMLImageElement;
     try {
       const frame = await this.api.dispatch<ScreenFrame>({ action: 'screen', id: this.device.id });
       if (this.closed) return;
@@ -134,8 +154,13 @@ export class PhoneViewer {
         return;
       }
     } finally {
+      PhoneViewer.captureActive = false;
       this.capturing = false;
       this.updateControls();
+      if (this.frame && !this.checkedApps && !this.closed && !this.busy) {
+        this.checkedApps = true;
+        void this.checkApps();
+      }
       this.schedule(this.failures ? Math.min(4000, 500 * 2 ** Math.min(this.failures, 3)) : 250);
     }
   }

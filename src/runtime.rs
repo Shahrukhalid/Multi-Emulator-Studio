@@ -11,6 +11,33 @@ pub struct ScreenFrame {
     pub height: u32,
 }
 
+#[derive(Debug, Serialize)]
+pub struct GoogleApps {
+    pub play_store: bool,
+    pub youtube: bool,
+}
+
+impl GoogleApps {
+    pub fn from_packages(packages: &str) -> Self {
+        let has = |name: &str| packages.lines().any(|line| line.trim() == name);
+        Self {
+            play_store: has("package:com.android.vending"),
+            youtube: has("package:com.google.android.youtube"),
+        }
+    }
+}
+
+#[cfg(test)]
+#[test]
+fn google_apps_require_exact_package_names() {
+    let apps = GoogleApps::from_packages(
+        "package:com.android.vending\npackage:com.google.android.youtube.fake\n",
+    );
+    assert!(apps.play_store);
+    assert!(!apps.youtube);
+    assert!(GoogleApps::from_packages("package:com.google.android.youtube\n").youtube);
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum NavigationKey {
@@ -66,6 +93,11 @@ pub trait Engine {
     fn screen(&mut self, _: &Device) -> Result<ScreenFrame> {
         Err(crate::Error::Unavailable(
             "Screen viewing is unavailable".into(),
+        ))
+    }
+    fn google_apps(&mut self, _: &Device) -> Result<GoogleApps> {
+        Err(crate::Error::Unavailable(
+            "Google app verification is unavailable".into(),
         ))
     }
     fn navigate(&mut self, _: &Device, _: NavigationKey) -> Result<()> {

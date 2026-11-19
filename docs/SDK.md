@@ -5,7 +5,7 @@ Install JDK 17 and the official Android SDK command-line tools from https://deve
 ```
 sdkmanager --list
 sdkmanager --licenses
-sdkmanager "platform-tools" "emulator" "system-images;android-34;google_apis;arm64-v8a"
+sdkmanager "platform-tools" "emulator" "system-images;android-34;google_apis_playstore;arm64-v8a"
 ```
 
 On Windows x64 select an available x86_64 image instead. The user must review and accept licenses personally. Select the SDK root in the development panel. No SDK or system images are included in this repository or installer.

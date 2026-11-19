@@ -59,6 +59,9 @@ pub enum Request {
     Screen {
         id: Uuid,
     },
+    GoogleApps {
+        id: Uuid,
+    },
     Navigate {
         id: Uuid,
         key: crate::runtime::NavigationKey,
@@ -129,6 +132,7 @@ impl Controller {
             }
             Request::Logs { id } => json!(self.manager.logs(id)?),
             Request::Screen { id } => json!(self.manager.screen(id)?),
+            Request::GoogleApps { id } => json!(self.manager.google_apps(id)?),
             Request::Navigate { id, key } => {
                 self.manager.navigate(id, key)?;
                 json!(true)

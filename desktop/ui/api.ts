@@ -281,9 +281,9 @@ class BrowserPreviewClient implements IApiClient {
 
   async getImages(): Promise<string[]> {
     return [
-      'system-images;android-34;google_apis;x86_64',
-      'system-images;android-33;google_apis;x86_64',
-      'system-images;android-31;google_apis;x86_64'
+      'system-images;android-34;google_apis_playstore;x86_64',
+      'system-images;android-33;google_apis_playstore;x86_64',
+      'system-images;android-31;google_apis_playstore;x86_64'
     ];
   }
 
