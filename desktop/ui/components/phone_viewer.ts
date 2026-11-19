@@ -1,5 +1,5 @@
 import { IApiClient } from '../api.js';
-import { Device, GoogleApps, NavigationKey, ScreenFrame, TouchInput } from '../types.js';
+import { Device, GoogleApps, NavigationKey, TouchInput } from '../types.js';
 
 export class PhoneViewer {
   // One bounded capture at a time across the entire local workspace.
@@ -7,12 +7,16 @@ export class PhoneViewer {
   readonly element = document.createElement('div');
   private closed = false;
   private timer: number | null = null;
-  private frame: ScreenFrame | null = null;
+  private frame: { width: number; height: number } | null = null;
+  private frameUrl: string | null = null;
+  private visible = false;
+  private observer: IntersectionObserver | null = null;
   private busy = false;
   private capturing = false;
   private failures = 0;
   private terminal = false;
   private checkedApps = false;
+  private apps: GoogleApps | null = null;
   private start: { x: number; y: number; width: number; height: number } | null = null;
   private visibilityChanged = () => this.schedule(0);
 
@@ -29,11 +33,12 @@ export class PhoneViewer {
         <button data-key="volume_down" disabled>Volume −</button>
         <button data-key="volume_up" disabled>Volume +</button>
         <button data-key="power" disabled>Power</button>
-      </div><button class="phone-app-check" disabled>Check Play Store &amp; YouTube</button><p class="phone-app-status" role="status"></p><p class="phone-viewer-note" role="status">Local screen refresh · click to tap, drag to swipe</p>
+      </div><button class="phone-app-check" disabled>Check Play Store &amp; YouTube</button><button class="phone-app-check phone-youtube-store" hidden disabled>Get YouTube from Play Store</button><p class="phone-app-status" role="status"></p><p class="phone-viewer-note" role="status">Local screen refresh · click to tap, drag to swipe</p>
     </section>`;
     this.element.querySelector('.phone-title')!.textContent = device.spec.name;
     this.element.querySelector('.phone-close')!.addEventListener('click', onClose);
     this.element.querySelector('.phone-app-check')!.addEventListener('click', () => void this.checkApps());
+    this.element.querySelector('.phone-youtube-store')!.addEventListener('click', () => void this.send({ action: 'open_youtube_store', id: this.device.id }));
     const image = this.element.querySelector('.phone-frame') as HTMLImageElement;
     image.addEventListener('pointerdown', e => {
       if (!this.frame || this.busy || e.button !== 0) return;
@@ -60,10 +65,16 @@ export class PhoneViewer {
 
   begin(): void {
     document.addEventListener('visibilitychange', this.visibilityChanged);
-    this.schedule(0);
+    this.observer = new IntersectionObserver(entries => {
+      this.visible = entries.some(entry => entry.isIntersecting);
+      this.schedule(0);
+    });
+    this.observer.observe(this.element);
   }
   dispose(): void {
     this.closed = true;
+    this.observer?.disconnect();
+    if (this.frameUrl) URL.revokeObjectURL(this.frameUrl);
     document.removeEventListener('visibilitychange', this.visibilityChanged);
     if (this.timer !== null) window.clearTimeout(this.timer);
   }
@@ -71,7 +82,7 @@ export class PhoneViewer {
   private schedule(delay: number): void {
     if (this.timer !== null) window.clearTimeout(this.timer);
     this.timer = null;
-    if (this.closed || this.terminal || document.hidden || this.busy || this.capturing) return;
+    if (this.closed || this.terminal || !this.visible || document.hidden || this.busy || this.capturing) return;
     this.timer = window.setTimeout(() => { this.timer = null; void this.refresh(); }, delay);
   }
 
@@ -80,6 +91,9 @@ export class PhoneViewer {
       b.disabled = !this.frame || this.busy;
     });
     (this.element.querySelector('.phone-app-check') as HTMLButtonElement).disabled = !this.frame || this.busy;
+    const store = this.element.querySelector('.phone-youtube-store') as HTMLButtonElement;
+    store.hidden = !this.apps?.play_store || !!this.apps.youtube;
+    store.disabled = !this.frame || this.busy;
   }
 
   private async checkApps(): Promise<void> {
@@ -90,7 +104,8 @@ export class PhoneViewer {
     status.textContent = 'Checking installed apps…';
     try {
       const apps = await this.api.dispatch<GoogleApps>({ action: 'google_apps', id: this.device.id });
-      status.textContent = `Play Store: ${apps.play_store ? 'installed' : 'missing'} · YouTube: ${apps.youtube ? 'installed' : 'missing — install via Play Store'}`;
+      this.apps = apps;
+      status.textContent = `Play Store: ${apps.play_store ? 'installed' : 'missing'} · YouTube: ${apps.youtube_preinstalled ? 'preinstalled' : apps.youtube ? 'installed' : 'missing — install via Play Store'}`;
     } catch { status.textContent = 'App check failed; try again after Android is ready.'; }
     finally { this.busy = false; this.updateControls(); this.schedule(0); }
   }
@@ -101,7 +116,7 @@ export class PhoneViewer {
     return { x: Math.max(0, Math.min(width - 1, Math.floor((e.clientX - box.left) / box.width * width))), y: Math.max(0, Math.min(height - 1, Math.floor((e.clientY - box.top) / box.height * height))) };
   }
 
-  private async send(request: { action: 'navigate'; id: string; key: NavigationKey } | { action: 'touch'; id: string; input: TouchInput }): Promise<void> {
+  private async send(request: { action: 'navigate'; id: string; key: NavigationKey } | { action: 'touch'; id: string; input: TouchInput } | { action: 'open_youtube_store'; id: string }): Promise<void> {
     if (!this.frame || this.busy || this.closed) return;
     this.busy = true;
     this.schedule(0);
@@ -113,22 +128,31 @@ export class PhoneViewer {
   }
 
   private async refresh(): Promise<void> {
-    if (this.closed || this.terminal || this.capturing || this.busy || document.hidden) return;
+    if (this.closed || this.terminal || !this.visible || this.capturing || this.busy || document.hidden) return;
     if (PhoneViewer.captureActive) { this.schedule(100); return; }
     PhoneViewer.captureActive = true;
     this.capturing = true;
     const status = this.element.querySelector('.phone-status')!;
     const image = this.element.querySelector('.phone-frame') as HTMLImageElement;
     try {
-      const frame = await this.api.dispatch<ScreenFrame>({ action: 'screen', id: this.device.id });
+      const bytes = await this.api.screenPng(this.device.id);
       if (this.closed) return;
-      const src = `data:image/png;base64,${frame.png_base64}`;
-      if (image.src !== src) {
+      if (!(bytes instanceof ArrayBuffer) || bytes.byteLength < 24 || bytes.byteLength > 16 * 1024 * 1024) throw new Error('Invalid screen response');
+      const header = new DataView(bytes);
+      const frame = { width: header.getUint32(16), height: header.getUint32(20) };
+      const src = URL.createObjectURL(new Blob([bytes], { type: 'image/png' }));
+      try {
         const decoded = new Image();
         decoded.src = src;
         await decoded.decode();
-        if (this.closed) return;
+        if (this.closed) { URL.revokeObjectURL(src); return; }
+        if (decoded.naturalWidth !== frame.width || decoded.naturalHeight !== frame.height) throw new Error('Invalid frame dimensions');
         image.src = src;
+        if (this.frameUrl) URL.revokeObjectURL(this.frameUrl);
+        this.frameUrl = src;
+      } catch (error) {
+        URL.revokeObjectURL(src);
+        throw error;
       }
       this.frame = frame;
       this.failures = 0;

@@ -108,6 +108,12 @@ export class App {
           }
         },
         onInstallRuntime: async (sdkRoot) => {
+          if (this.isConnected) {
+            await this.api.installGooglePlay();
+            await this.refreshSdkCatalog();
+            toast.show('Official Google Play image installed', 'success');
+            return;
+          }
           await this.api.installRuntime(sdkRoot);
           toast.show('Official Android runtime installed', 'success');
           await this.api.connect(this.dataDir, sdkRoot);
@@ -122,7 +128,7 @@ export class App {
             return;
           }
           await this.refreshSdkCatalog();
-          const ready = this.preflight.ready && !!this.images.length && !!this.hardwareProfiles.length;
+          const ready = this.preflight.ready && this.images.some(isGooglePlayImage) && !!this.hardwareProfiles.length;
           toast.show(ready ? 'Runtime preflight passed; actual boot still unverified' : 'Runtime setup requires attention', ready ? 'success' : 'warning');
         },
         onFetchLogs: async () => {
@@ -395,7 +401,7 @@ export class App {
   private openWizard(initialPreset?: DevicePreset): void {
     const playImages = this.images.filter(isGooglePlayImage);
     if (!this.api.isPreview && (!this.isConnected || !playImages.length || !this.hardwareProfiles.length)) {
-      toast.show('Install a compatible Google Play system image in the official Android SDK Manager, then Check Toolchain.', 'warning');
+      toast.show('Install the Google Play image in Settings before creating a device.', 'warning');
       this.switchTab('settings');
       return;
     }

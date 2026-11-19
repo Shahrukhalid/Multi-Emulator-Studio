@@ -63,7 +63,7 @@ fn normal_exit_is_not_a_crash() {
 }
 
 // Capture only the disposable frame in a temporary file; do not persist guest images.
-fn capture_png(cmd: &mut Command) -> Result<ScreenFrame> {
+fn capture_png(cmd: &mut Command) -> Result<Vec<u8>> {
     let mut stdout = tempfile::tempfile()?;
     let mut child = cmd
         .stdin(Stdio::null())
@@ -91,10 +91,11 @@ fn capture_png(cmd: &mut Command) -> Result<ScreenFrame> {
     stdout.seek(SeekFrom::Start(0))?;
     let mut png = Vec::new();
     stdout.take(limit + 1).read_to_end(&mut png)?;
-    frame_from_png(png, limit)
+    png_dimensions(&png, limit)?;
+    Ok(png)
 }
 
-fn frame_from_png(png: Vec<u8>, limit: u64) -> Result<ScreenFrame> {
+fn png_dimensions(png: &[u8], limit: u64) -> Result<(u32, u32)> {
     if png.len() < 24
         || png.len() as u64 > limit
         || &png[..8] != b"\x89PNG\r\n\x1a\n"
@@ -107,6 +108,11 @@ fn frame_from_png(png: Vec<u8>, limit: u64) -> Result<ScreenFrame> {
     if !(1..=4320).contains(&width) || !(1..=4320).contains(&height) {
         return Err(Error::Runtime("Unsupported screen dimensions".into()));
     }
+    Ok((width, height))
+}
+
+fn frame_from_png(png: Vec<u8>, limit: u64) -> Result<ScreenFrame> {
+    let (width, height) = png_dimensions(&png, limit)?;
     Ok(ScreenFrame {
         png_base64: base64::engine::general_purpose::STANDARD.encode(png),
         width,
@@ -385,6 +391,33 @@ pub fn install_runtime(root: &Path) -> Result<Sdk> {
         ));
     }
     Ok(sdk)
+}
+
+/// Add the official Play image only; never update emulator tools or existing AVDs.
+pub fn install_google_play_image(sdk: &Sdk) -> Result<()> {
+    let abi = match std::env::consts::ARCH {
+        "aarch64" => "arm64-v8a",
+        "x86_64" => "x86_64",
+        _ => return Err(Error::Unavailable("unsupported CPU".into())),
+    };
+    let image = format!("system-images;android-34;google_apis_playstore;{abi}");
+    if sdk.images()?.contains(&image) {
+        return Ok(());
+    }
+    run(
+        Command::new(&sdk.sdkmanager)
+            .env("ANDROID_HOME", &sdk.root)
+            .env("ANDROID_SDK_ROOT", &sdk.root)
+            .args(["--install", &image]),
+        None,
+        Duration::from_secs(1800),
+    )?;
+    if !sdk.images()?.contains(&image) {
+        return Err(Error::Unavailable(
+            "Official Google Play image not installed; check SDK licenses and network".into(),
+        ));
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -965,6 +998,9 @@ impl Engine for Android {
         log_tail(&self.log_path(d), 64 * 1024).map_err(Error::from)
     }
     fn screen(&mut self, d: &Device) -> Result<ScreenFrame> {
+        frame_from_png(self.screen_png(d)?, 16 * 1024 * 1024)
+    }
+    fn screen_png(&mut self, d: &Device) -> Result<Vec<u8>> {
         let port = self.interactive_port(d)?;
         capture_png(self.adb_for(port).args(["exec-out", "screencap", "-p"]))
     }
@@ -975,7 +1011,40 @@ impl Engine for Android {
             None,
             SHORT,
         )?;
-        Ok(crate::runtime::GoogleApps::from_packages(&packages))
+        let mut apps = crate::runtime::GoogleApps::from_packages(&packages);
+        let system = run(
+            self.adb_for(port)
+                .args(["shell", "pm", "list", "packages", "-s"]),
+            None,
+            SHORT,
+        )?;
+        apps.youtube_preinstalled =
+            apps.youtube && crate::runtime::GoogleApps::from_packages(&system).youtube;
+        Ok(apps)
+    }
+    fn open_youtube_store(&mut self, d: &Device) -> Result<()> {
+        let port = self.interactive_port(d)?;
+        let output = run(
+            self.adb_for(port).args([
+                "shell",
+                "am",
+                "start",
+                "-a",
+                "android.intent.action.VIEW",
+                "-d",
+                "market://details?id=com.google.android.youtube",
+                "-p",
+                "com.android.vending",
+            ]),
+            None,
+            SHORT,
+        )?;
+        if output.contains("Error") {
+            return Err(Error::Unavailable(
+                "Could not open YouTube in Play Store".into(),
+            ));
+        }
+        Ok(())
     }
     fn navigate(&mut self, d: &Device, key: NavigationKey) -> Result<()> {
         let key = match key {

@@ -62,6 +62,9 @@ pub enum Request {
     GoogleApps {
         id: Uuid,
     },
+    OpenYoutubeStore {
+        id: Uuid,
+    },
     Navigate {
         id: Uuid,
         key: crate::runtime::NavigationKey,
@@ -77,6 +80,14 @@ pub struct Controller {
     root: PathBuf,
 }
 impl Controller {
+    pub fn sdk(&self) -> Sdk {
+        self.sdk.clone()
+    }
+    pub fn screen_png(&mut self, id: &str) -> std::result::Result<Vec<u8>, ApiError> {
+        let id =
+            Uuid::parse_str(id).map_err(|_| crate::Error::Invalid("Invalid device ID".into()))?;
+        self.manager.screen_png(id).map_err(ApiError::from)
+    }
     pub fn open(root: &Path, sdk_root: Option<PathBuf>) -> Result<Self> {
         std::fs::create_dir_all(root)?;
         let previous =
@@ -133,6 +144,10 @@ impl Controller {
             Request::Logs { id } => json!(self.manager.logs(id)?),
             Request::Screen { id } => json!(self.manager.screen(id)?),
             Request::GoogleApps { id } => json!(self.manager.google_apps(id)?),
+            Request::OpenYoutubeStore { id } => {
+                self.manager.open_youtube_store(id)?;
+                json!(true)
+            }
             Request::Navigate { id, key } => {
                 self.manager.navigate(id, key)?;
                 json!(true)

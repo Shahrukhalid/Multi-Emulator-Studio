@@ -26,6 +26,7 @@ export class SettingsComponent {
   private sdkDir = '';
   private connected = false;
   private installing = false;
+  private installMessage = '';
 
   constructor(
     host: HostInfo | null,
@@ -203,13 +204,13 @@ export class SettingsComponent {
             Install the official Android SDK command-line tools and a supported Java runtime first. Open Android Studio's SDK Manager, install Android Emulator, Android SDK Platform-Tools, and an Android system image matching your computer's CPU (ARM64 on Apple Silicon or x86_64 on supported Intel/AMD PCs). Review the license terms personally. If using command-line tools, review the licenses with:
           </p>
           <pre style="background: var(--bg-app); padding: 8px 12px; border-radius: 4px; border: 1px solid var(--border-subtle); font-family: var(--font-mono); margin-top: 6px; font-size: 11px;">sdkmanager --licenses</pre>
-          <p style="color: var(--text-secondary);">Enter the existing command-line tools SDK directory above. After personally accepting the package licenses, select Install Android runtime to download the emulator, platform tools and Android 14 Google Play image for your CPU. If already connected, install a Google Play image in the official SDK Manager and then Check Toolchain.</p>
+          <p style="color: var(--text-secondary);">After personally accepting the package licenses, install the Android runtime or, if already connected, download only the official Android 14 Google Play image for your CPU. Existing devices and emulator tools are not replaced.</p>
           <label style="display:block; margin-top:12px;">
-            <input type="checkbox" id="runtime-license-confirm" ${this.connected || this.installing ? 'disabled' : ''} />
+            <input type="checkbox" id="runtime-license-confirm" ${this.installing ? 'disabled' : ''} />
             I have reviewed and accepted the required SDK licenses using the official SDK Manager.
           </label>
           <button class="nav-item" id="btn-install-runtime" disabled style="margin-top:8px;">
-            ${this.installing ? 'Installing Android runtime…' : 'Install Android runtime'}
+            ${this.installing ? 'Downloading official packages…' : this.connected ? 'Install Google Play image' : 'Install Android runtime'}
           </button>
           <p id="runtime-install-result" role="status" class="form-helper-text"></p>
         </div>
@@ -295,11 +296,12 @@ export class SettingsComponent {
     const install = this.element.querySelector('#btn-install-runtime') as HTMLButtonElement;
     const connect = this.element.querySelector('#btn-connect-sdk') as HTMLButtonElement;
     const result = this.element.querySelector('#runtime-install-result') as HTMLElement;
+    result.textContent = this.installMessage;
     confirm?.addEventListener('change', () => {
-      install.disabled = !confirm.checked || this.connected || this.installing;
+      install.disabled = !confirm.checked || this.installing;
     });
     install?.addEventListener('click', async () => {
-      if (this.installing || this.connected || !confirm.checked) return;
+      if (this.installing || !confirm.checked) return;
       const input = this.element.querySelector('#setting-sdk-input') as HTMLInputElement;
       const root = input.value.trim();
       if (!root) {
@@ -312,18 +314,16 @@ export class SettingsComponent {
       connect.disabled = true;
       confirm.disabled = true;
       input.readOnly = true;
-      result.textContent = 'Downloading official packages. This may take up to 30 minutes.';
+      this.installMessage = 'Downloading official packages. This may take up to 30 minutes.';
+      result.textContent = this.installMessage;
       try {
         await this.callbacks.onInstallRuntime(root);
-        result.textContent = 'Android runtime installed and connected.';
+        this.installMessage = 'Official Google Play image installed and ready for new devices.';
       } catch (err: unknown) {
-        result.textContent = 'Setup failed: ' + ((err as { message?: string }).message || String(err));
+        this.installMessage = 'Setup failed: ' + ((err as { message?: string }).message || String(err));
       } finally {
         this.installing = false;
-        install.disabled = this.connected || !confirm.checked;
-        connect.disabled = this.connected;
-        confirm.disabled = this.connected;
-        input.readOnly = this.connected;
+        this.render();
       }
     });
 

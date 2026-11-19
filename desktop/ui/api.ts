@@ -23,6 +23,8 @@ export interface IApiClient {
   getDefaultDataDir(): Promise<string>;
   connect(root: string, sdkRoot?: string | null): Promise<void>;
   installRuntime(sdkRoot: string): Promise<void>;
+  installGooglePlay(): Promise<void>;
+  screenPng(id: string): Promise<ArrayBuffer>;
   pickApk(): Promise<string | null>;
   pickSdkDirectory(): Promise<string | null>;
   dispatch<T>(request: Request): Promise<T>;
@@ -70,6 +72,8 @@ class TauriApiClient implements IApiClient {
   installRuntime(sdkRoot: string): Promise<void> {
     return this.invoke<void>('install_android_runtime', { sdkRoot });
   }
+  installGooglePlay(): Promise<void> { return this.invoke<void>('install_google_play'); }
+  screenPng(id: string): Promise<ArrayBuffer> { return this.invoke<ArrayBuffer>('screen_png', { id }); }
 
   pickApk(): Promise<string | null> {
     return this.invoke<string | null>('pick_apk');
@@ -206,6 +210,8 @@ class BrowserPreviewClient implements IApiClient {
   async installRuntime(_sdkRoot: string): Promise<void> {
     throw new Error('Runtime installation requires the native desktop app.');
   }
+  async installGooglePlay(): Promise<void> { throw new Error('Image installation requires the native app.'); }
+  async screenPng(_id: string): Promise<ArrayBuffer> { throw new Error('Screen capture requires the native app.'); }
 
   async pickApk(): Promise<string | null> {
     throw new Error('Native file selection requires the desktop app.');

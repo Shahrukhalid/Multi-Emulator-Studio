@@ -705,6 +705,7 @@ body {
 .phone-panel { min-width: 0; border: 1px solid var(--border-subtle); border-radius: 14px; overflow: hidden; background: var(--bg-surface-subtle); }
 .phone-panel .phone-display img { max-height: 56vh; }
 .phone-app-check { display: block; margin: 8px auto; padding: 6px 12px; }
+.phone-app-check[hidden] { display: none; }
 .phone-app-status { text-align: center; font-size: 12px; padding: 0 8px; }
 .device-diagnostic { font-size: 12px; color: var(--text-secondary); margin: 8px 0; }
 .device-diagnostic summary { cursor: pointer; overflow-wrap: anywhere; }

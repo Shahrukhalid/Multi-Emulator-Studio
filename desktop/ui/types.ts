@@ -62,7 +62,7 @@ export interface RuntimePreflight {
 }
 
 export interface ScreenFrame { png_base64: string; width: number; height: number; }
-export interface GoogleApps { play_store: boolean; youtube: boolean; }
+export interface GoogleApps { play_store: boolean; youtube: boolean; youtube_preinstalled: boolean; }
 export function isGooglePlayImage(image: string): boolean { return image.split(';')[2] === 'google_apis_playstore'; }
 export type NavigationKey = 'back' | 'home' | 'recents' | 'volume_up' | 'volume_down' | 'power';
 export type TouchInput = { kind: 'tap'; x: number; y: number } | { kind: 'swipe'; x: number; y: number; end_x: number; end_y: number };
@@ -93,6 +93,7 @@ export type Request =
   | { action: 'runtime_preflight' }
   | { action: 'screen'; id: string }
   | { action: 'google_apps'; id: string }
+  | { action: 'open_youtube_store'; id: string }
   | { action: 'navigate'; id: string; key: NavigationKey }
   | { action: 'touch'; id: string; input: TouchInput }
   | { action: 'list' }

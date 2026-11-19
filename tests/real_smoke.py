@@ -75,6 +75,7 @@ def main():
             apps = call("google_apps", id=device_id)
             assert apps["play_store"], "Play Store missing from Google Play image"
             assert apps["youtube"], "YouTube missing from Google Play image; install via official store before certifying this image"
+            assert apps["youtube_preinstalled"], "YouTube is not a system app on this image"
             call("navigate", id=device_id, key="home")
             call("navigate", id=device_id, key="volume_up")
             call("navigate", id=device_id, key="volume_down")

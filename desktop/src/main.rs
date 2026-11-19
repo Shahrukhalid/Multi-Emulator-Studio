@@ -13,6 +13,7 @@ use tauri_plugin_dialog::DialogExt;
 
 type Shared = Arc<Mutex<Option<Controller>>>;
 type HealthCache = Arc<Mutex<Option<Result<serde_json::Value, ApiError>>>>;
+static IMAGE_INSTALL: Mutex<()> = Mutex::new(());
 
 #[tauri::command]
 fn health(cache: State<'_, HealthCache>) -> Result<serde_json::Value, ApiError> {
@@ -81,12 +82,79 @@ async fn install_android_runtime(
 }
 
 #[tauri::command]
+async fn install_google_play(state: State<'_, Shared>) -> Result<(), ApiError> {
+    let s = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let _install = IMAGE_INSTALL.try_lock().map_err(|_| ApiError {
+            code: "conflict",
+            message: "SDK image installation already running".into(),
+        })?;
+        let sdk = s
+            .lock()
+            .map_err(|_| ApiError {
+                code: "internal",
+                message: "controller lock poisoned".into(),
+            })?
+            .as_ref()
+            .ok_or_else(|| ApiError {
+                code: "unavailable",
+                message: "Connect SDK first".into(),
+            })?
+            .sdk();
+        multi_emulator_core::android::install_google_play_image(&sdk).map_err(ApiError::from)
+    })
+    .await
+    .map_err(|e| ApiError {
+        code: "internal",
+        message: e.to_string(),
+    })?
+}
+
+#[tauri::command]
+async fn screen_png(
+    id: String,
+    state: State<'_, Shared>,
+) -> Result<tauri::ipc::Response, ApiError> {
+    let s = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut guard = s.try_lock().map_err(|_| ApiError {
+            code: "unavailable",
+            message: "Device controller busy; retrying screen refresh".into(),
+        })?;
+        let png = guard
+            .as_mut()
+            .ok_or_else(|| ApiError {
+                code: "unavailable",
+                message: "Connect SDK first".into(),
+            })?
+            .screen_png(&id)?;
+        Ok(tauri::ipc::Response::new(png))
+    })
+    .await
+    .map_err(|e| ApiError {
+        code: "internal",
+        message: e.to_string(),
+    })?
+}
+
+#[tauri::command]
 async fn dispatch(
     request: Request,
     state: State<'_, Shared>,
 ) -> Result<serde_json::Value, ApiError> {
     let s = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
+        let _image_guard = if matches!(
+            &request,
+            Request::Create { .. } | Request::CloneProfile { .. }
+        ) {
+            Some(IMAGE_INSTALL.try_lock().map_err(|_| ApiError {
+                code: "conflict",
+                message: "Wait for Google Play image installation to finish".into(),
+            })?)
+        } else {
+            None
+        };
         // Screen refresh is expendable; never queue it behind a lifecycle command.
         let mut guard = if matches!(&request, Request::Screen { .. }) {
             s.try_lock().map_err(|_| ApiError {
@@ -191,6 +259,8 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             connect,
             install_android_runtime,
+            install_google_play,
+            screen_png,
             pick_apk,
             pick_sdk_directory,
             dispatch,

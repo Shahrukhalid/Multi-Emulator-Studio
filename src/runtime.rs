@@ -15,6 +15,7 @@ pub struct ScreenFrame {
 pub struct GoogleApps {
     pub play_store: bool,
     pub youtube: bool,
+    pub youtube_preinstalled: bool,
 }
 
 impl GoogleApps {
@@ -23,6 +24,7 @@ impl GoogleApps {
         Self {
             play_store: has("package:com.android.vending"),
             youtube: has("package:com.google.android.youtube"),
+            youtube_preinstalled: false,
         }
     }
 }
@@ -95,10 +97,18 @@ pub trait Engine {
             "Screen viewing is unavailable".into(),
         ))
     }
+    fn screen_png(&mut self, _: &Device) -> Result<Vec<u8>> {
+        Err(crate::Error::Unavailable(
+            "Binary screen viewing is unavailable".into(),
+        ))
+    }
     fn google_apps(&mut self, _: &Device) -> Result<GoogleApps> {
         Err(crate::Error::Unavailable(
             "Google app verification is unavailable".into(),
         ))
+    }
+    fn open_youtube_store(&mut self, _: &Device) -> Result<()> {
+        Err(crate::Error::Unavailable("Play Store unavailable".into()))
     }
     fn navigate(&mut self, _: &Device, _: NavigationKey) -> Result<()> {
         Err(crate::Error::Unavailable(

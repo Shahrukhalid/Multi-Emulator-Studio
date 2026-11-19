@@ -107,3 +107,10 @@ No production merge or release until the applicable gates are verified. A CI-gen
 - Up to four independently controlled phone panels can be opened in the main workspace; only one bounded screenshot capture is in flight across the panels. This is adaptive screenshot refresh, not encoded video streaming.
 - The installed-app check queries exact package names on the selected managed device. YouTube is not guaranteed by all official images; missing apps are reported, never silently sideloaded. The real smoke test requires both packages on each of two disposable guests before claiming that the image fulfills the requirement.
 - Actual guest boot, both Google apps, concurrent display performance and video streaming remain verification/development gates.
+
+## M4.4 — in-app Play image setup and binary display transport
+
+- Connected Settings can add the official Android 14 Google Play image for the host CPU without updating emulator binaries or modifying existing AVDs. SDK licenses must be accepted personally; parallel image installation and profile creation are blocked while setup runs.
+- Native desktop screen capture uses validated bounded PNG bytes over binary IPC instead of Base64 JSON, with object URL cleanup and off-screen polling suspension. The CLI retains its JSON screen contract. This remains screenshot refresh, not encoded video streaming or a measured FPS claim.
+- Verify YouTube package presence and system-app status independently. If missing, a user-initiated button opens its official Play Store listing inside the selected managed guest. No unofficial APK, sign-in automation, or silent installation.
+- Require successful real-host tests for Play Store, preinstalled YouTube and display performance before production release.
