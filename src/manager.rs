@@ -11,12 +11,24 @@ use std::{
 };
 use uuid::Uuid;
 
+/// Own an acquired lock, and release it explicitly before closing the descriptor.
+/// On Unix, an inherited or duplicated file descriptor may otherwise keep a
+/// flock alive after the original descriptor closes.
+struct ControllerLock(File);
+
+impl Drop for ControllerLock {
+    fn drop(&mut self) {
+        let _ = self.0.unlock();
+    }
+}
+
 pub struct Manager<E: Engine> {
     store: Store,
     engine: E,
-    _lock: File,
     queue: VecDeque<Uuid>,
     failed_starts: HashMap<Uuid, String>,
+    // Drop last: the store and emulator engine must be closed before releasing ownership.
+    _lock: ControllerLock,
 }
 impl Manager<crate::android::Android> {
     pub fn prepare_screen_capture(&mut self, id: Uuid) -> Result<crate::android::ScreenCapture> {
@@ -34,6 +46,7 @@ impl<E: Engine> Manager<E> {
             .open(root.join("manager.lock"))?;
         lock.try_lock()
             .map_err(|_| crate::Error::Conflict("another controller owns this storage".into()))?;
+        let lock = ControllerLock(lock);
         Ok(Self {
             store: Store::open(&root.join("metadata.db"))?,
             engine,
@@ -306,7 +319,31 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let m = Manager::open(dir.path(), Fake::default()).unwrap();
         assert!(Manager::open(dir.path(), Fake::default()).is_err());
+        assert!(Manager::open(dir.path(), Fake::default()).is_err());
         drop(m);
+        assert!(Manager::open(dir.path(), Fake::default()).is_ok());
+    }
+    #[cfg(unix)]
+    #[test]
+    fn storage_lock_releases_even_with_duplicated_descriptor() {
+        let dir = tempfile::tempdir().unwrap();
+        let m = Manager::open(dir.path(), Fake::default()).unwrap();
+        let duplicate = m._lock.0.try_clone().unwrap();
+        assert!(Manager::open(dir.path(), Fake::default()).is_err());
+        drop(m);
+        let next = Manager::open(dir.path(), Fake::default()).unwrap();
+        drop(duplicate);
+        assert!(Manager::open(dir.path(), Fake::default()).is_err());
+        drop(next);
+        assert!(Manager::open(dir.path(), Fake::default()).is_ok());
+    }
+    #[test]
+    fn storage_lock_releases_after_failed_database_open() {
+        let dir = tempfile::tempdir().unwrap();
+        let blocked = dir.path().join("metadata.db");
+        std::fs::create_dir(&blocked).unwrap();
+        assert!(Manager::open(dir.path(), Fake::default()).is_err());
+        std::fs::remove_dir(&blocked).unwrap();
         assert!(Manager::open(dir.path(), Fake::default()).is_ok());
     }
     #[test]
