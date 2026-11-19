@@ -35,8 +35,9 @@ export class DeviceCardComponent {
   }
 
   updateStatus(status: Status): void {
+    const changed = this.status?.state !== status.state || this.status?.diagnostic !== status.diagnostic;
     this.status = status;
-    this.render();
+    if (changed) this.render();
   }
 
   setBusy(busy: boolean): void {
@@ -103,7 +104,7 @@ export class DeviceCardComponent {
       primaryBtnHtml = `
         <button class="btn-primary-action open" id="btn-primary-action" ${this.isBusy ? 'disabled' : ''}>
           ${Icons.external}
-          <span>Window info</span>
+          <span>Open phone</span>
         </button>
       `;
     } else if (isStarting || isQueued || state === 'stopping') {
@@ -125,7 +126,7 @@ export class DeviceCardComponent {
         ${illustrationSvg}
       </div>
 
-      ${this.status?.diagnostic ? `<p class="form-helper-text">${this.escapeHtml(this.status.diagnostic)}</p>` : ''}
+      ${this.status?.diagnostic ? `<details class="device-diagnostic"><summary>${this.escapeHtml(this.status.diagnostic.split('\n')[0].slice(0, 160))}</summary><pre>${this.escapeHtml(this.status.diagnostic)}</pre></details>` : ''}
 
       <div class="device-header-row">
         <h3 class="device-card-title" title="${this.escapeHtml(spec.name)}">

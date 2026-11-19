@@ -6,6 +6,7 @@ import { DeviceListComponent } from './components/device_list.js';
 import { TemplatesComponent } from './components/templates.js';
 import { SettingsComponent } from './components/settings.js';
 import { WizardComponent } from './components/wizard.js';
+import { PhoneViewer } from './components/phone_viewer.js';
 import { ApkModalComponent } from './components/apk_modal.js';
 import { DeleteModalComponent } from './components/delete_modal.js';
 import { toast } from './toast.js';
@@ -22,6 +23,8 @@ export class App {
 
   private activeTab: MainNavTab = 'devices';
   private activeModal: HTMLElement | null = null;
+  private modalCleanup: (() => void) | null = null;
+  private modalKey: ((event: KeyboardEvent) => void) | null = null;
   private pollInterval: number | null = null;
 
   private devices: Device[] = [];
@@ -276,6 +279,7 @@ export class App {
       this.deviceList.updateSingleStatus(status);
       await this.refreshDevices();
       toast.show(`${device.spec.name} is ${status.state}`, status.state === 'ready' ? 'success' : 'warning');
+      if (!this.api.isPreview && (status.state === 'starting' || status.state === 'ready')) this.handleOpen(device);
     } catch (err: unknown) {
       const msg = (err as { message?: string }).message || String(err);
       toast.show(`Start failed: ${msg}`, 'error');
@@ -286,7 +290,10 @@ export class App {
   }
 
   private handleOpen(device: Device): void {
-    toast.show(`${device.spec.name} runs in a separate Android Emulator window. Select it from your taskbar or Dock.`, 'info');
+    if (this.api.isPreview) { toast.show('Live screen requires the native app', 'warning'); return; }
+    const viewer = new PhoneViewer(this.api, device, () => this.closeModal());
+    this.openModal(viewer.element, () => viewer.dispose());
+    viewer.begin();
   }
 
   private async handleStop(device: Device): Promise<void> {
@@ -406,21 +413,25 @@ export class App {
     this.openModal(modal.getElement());
   }
 
-  private openModal(element: HTMLElement): void {
+  private openModal(element: HTMLElement, cleanup?: () => void): void {
     this.closeModal();
     this.activeModal = element;
+    this.modalCleanup = cleanup || null;
     document.body.appendChild(element);
 
-    const onKey = (e: KeyboardEvent) => {
+    this.modalKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         this.closeModal();
-        window.removeEventListener('keydown', onKey);
       }
     };
-    window.addEventListener('keydown', onKey);
+    window.addEventListener('keydown', this.modalKey);
   }
 
   private closeModal(): void {
+    if (this.modalKey) window.removeEventListener('keydown', this.modalKey);
+    this.modalKey = null;
+    this.modalCleanup?.();
+    this.modalCleanup = null;
     if (this.activeModal) {
       this.activeModal.remove();
       this.activeModal = null;

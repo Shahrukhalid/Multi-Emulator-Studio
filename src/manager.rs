@@ -127,6 +127,15 @@ impl<E: Engine> Manager<E> {
     pub fn logs(&mut self, id: Uuid) -> Result<String> {
         self.engine.logs(&self.store.get(id)?)
     }
+    pub fn screen(&mut self, id: Uuid) -> Result<crate::runtime::ScreenFrame> {
+        self.engine.screen(&self.store.get(id)?)
+    }
+    pub fn navigate(&mut self, id: Uuid, key: crate::runtime::NavigationKey) -> Result<()> {
+        self.engine.navigate(&self.store.get(id)?, key)
+    }
+    pub fn touch(&mut self, id: Uuid, input: crate::runtime::TouchInput) -> Result<()> {
+        self.engine.touch(&self.store.get(id)?, input)
+    }
     /// Poll all profiles and admit queued starts in FIFO order.
     pub fn tick(&mut self) -> Result<Vec<Status>> {
         let mut statuses = self.snapshot()?;

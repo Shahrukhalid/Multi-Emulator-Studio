@@ -86,3 +86,10 @@ No production merge or release until the applicable gates are verified. A CI-gen
 - Explicitly validate Info.plist, application package type, executable path and permissions, ARM64 architecture and code signature for both original and mounted development bundles and the future notarized bundle. These checks do not substitute for observed GUI launch.
 - The owner must verify normal Finder launch on a compatible desktop session, then verify the official Android emulator independently and run the full disposable two-device smoke test. No security overrides or forced launches were performed. Production release remains blocked.
 - CI follow-up: Tauri successfully produced the ad-hoc DMG, then cleaned the intermediate `.app` as expected for a DMG-only build. Correct the verification gate to require exactly one DMG and verify the packaged app after mounting read-only; do not require the temporary app. Signature and ARM64 executable checks remain mandatory.
+
+## M4.1 — embedded Android screen and graceful exit
+
+- Owner screenshots confirm the application opened and an external Android guest reached its home screen. The reported boot was about 33 seconds; two-device verification remains pending.
+- Start managed Android emulators without external windows by default and display actual local screen captures in an in-app phone viewer. Three bottom navigation buttons and user-initiated taps/swipes are routed only to the selected, identity-verified managed device. The viewer is a bounded screenshot refresh, not a high-frame-rate streaming engine. `MES_HEADLESS=0` remains an explicit development diagnostic mode.
+- Successful process exit is treated as stopped, not crashed. Nonzero exits retain diagnostics; detailed log excerpts are collapsed instead of filling the device card.
+- Embedded rendering and navigation require real-host testing; no runtime success is asserted for the new mode until observed.

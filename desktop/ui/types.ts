@@ -61,6 +61,10 @@ export interface RuntimePreflight {
   diagnostic: string;
 }
 
+export interface ScreenFrame { png_base64: string; width: number; height: number; }
+export type NavigationKey = 'back' | 'home' | 'recents';
+export type TouchInput = { kind: 'tap'; x: number; y: number } | { kind: 'swipe'; x: number; y: number; end_x: number; end_y: number };
+
 export interface AddressOverlap {
   address: string;
   devices: string[];
@@ -85,6 +89,9 @@ export type Request =
   | { action: 'acceleration' }
   | { action: 'emulator_version' }
   | { action: 'runtime_preflight' }
+  | { action: 'screen'; id: string }
+  | { action: 'navigate'; id: string; key: NavigationKey }
+  | { action: 'touch'; id: string; input: TouchInput }
   | { action: 'list' }
   | { action: 'tick' }
   | { action: 'network' }

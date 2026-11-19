@@ -1,5 +1,6 @@
 """Opt-in actual host smoke test. Creates only disposable AVDs under a new directory."""
 import argparse
+import base64
 import json
 import os
 import pathlib
@@ -68,6 +69,10 @@ def main():
         ports=[s["console_port"] for s in statuses]
         for device_id,port in zip(ids,ports):
             assert guest(device_id,port,"shell","getprop","sys.boot_completed") == "1"
+            frame = call("screen", id=device_id)
+            assert frame["width"] > 0 and frame["height"] > 0
+            assert base64.b64decode(frame["png_base64"], validate=True).startswith(b"\x89PNG\r\n\x1a\n")
+            call("navigate", id=device_id, key="home")
         print("ADDRESSES",[s["addresses"] for s in statuses],flush=True)
         call("install_apk",id=ids[0],path=str(apk))
         assert guest(ids[0],ports[0],"shell","pm","list","packages",PACKAGE) == "package:" + PACKAGE

@@ -1,8 +1,9 @@
 use crate::{
     model::{Device, DeviceState, Status},
-    runtime::Engine,
+    runtime::{Engine, NavigationKey, ScreenFrame, TouchInput},
     Error, Result,
 };
+use base64::Engine as _;
 use serde::Serialize;
 use std::{
     collections::HashMap,
@@ -43,6 +44,88 @@ fn crash_diagnostic(log: &Path, exit: std::process::ExitStatus) -> String {
         Ok(tail) if !tail.is_empty() => format!("{message}\n{tail}"),
         _ => message,
     }
+}
+
+fn exit_diagnostic(log: &Path, exit: std::process::ExitStatus) -> Option<String> {
+    (!exit.success()).then(|| crash_diagnostic(log, exit))
+}
+
+#[cfg(all(test, unix))]
+#[test]
+fn normal_exit_is_not_a_crash() {
+    use std::os::unix::process::ExitStatusExt;
+    assert!(exit_diagnostic(Path::new("unused"), std::process::ExitStatus::from_raw(0)).is_none());
+    assert!(exit_diagnostic(
+        Path::new("unused"),
+        std::process::ExitStatus::from_raw(libc::SIGILL)
+    )
+    .is_some());
+}
+
+// Capture only the disposable frame in a temporary file; do not persist guest images.
+fn capture_png(cmd: &mut Command) -> Result<ScreenFrame> {
+    let mut stdout = tempfile::tempfile()?;
+    let mut child = cmd
+        .stdin(Stdio::null())
+        .stdout(stdout.try_clone()?)
+        .stderr(Stdio::null())
+        .spawn()?;
+    let deadline = Instant::now() + Duration::from_secs(10);
+    let limit = 16 * 1024 * 1024;
+    loop {
+        if stdout.metadata()?.len() > limit || Instant::now() >= deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(Error::Runtime(
+                "Screen capture exceeded its size or time limit".into(),
+            ));
+        }
+        if let Some(status) = child.try_wait()? {
+            if !status.success() {
+                return Err(Error::Runtime("Screen capture failed".into()));
+            }
+            break;
+        }
+        thread::sleep(Duration::from_millis(30));
+    }
+    stdout.seek(SeekFrom::Start(0))?;
+    let mut png = Vec::new();
+    stdout.take(limit + 1).read_to_end(&mut png)?;
+    frame_from_png(png, limit)
+}
+
+fn frame_from_png(png: Vec<u8>, limit: u64) -> Result<ScreenFrame> {
+    if png.len() < 24
+        || png.len() as u64 > limit
+        || &png[..8] != b"\x89PNG\r\n\x1a\n"
+        || &png[12..16] != b"IHDR"
+    {
+        return Err(Error::Runtime("Invalid screen frame".into()));
+    }
+    let width = u32::from_be_bytes(png[16..20].try_into().unwrap());
+    let height = u32::from_be_bytes(png[20..24].try_into().unwrap());
+    if !(1..=4320).contains(&width) || !(1..=4320).contains(&height) {
+        return Err(Error::Runtime("Unsupported screen dimensions".into()));
+    }
+    Ok(ScreenFrame {
+        png_base64: base64::engine::general_purpose::STANDARD.encode(png),
+        width,
+        height,
+    })
+}
+
+#[cfg(test)]
+#[test]
+fn screen_frame_checks_header_dimensions_and_limit() {
+    assert!(frame_from_png(vec![0; 24], 100).is_err());
+    let mut header = b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR".to_vec();
+    header.extend_from_slice(&1080u32.to_be_bytes());
+    header.extend_from_slice(&2400u32.to_be_bytes());
+    let frame = frame_from_png(header.clone(), 100).unwrap();
+    assert_eq!((frame.width, frame.height), (1080, 2400));
+    assert!(frame_from_png(header.clone(), 23).is_err());
+    header[16..20].copy_from_slice(&0u32.to_be_bytes());
+    assert!(frame_from_png(header, 100).is_err());
 }
 
 #[cfg(all(test, unix))]
@@ -465,8 +548,11 @@ impl Android {
                 .child
                 .try_wait()?
                 .ok_or_else(|| Error::Conflict("device is active".into()))?;
-            let diagnostic = crash_diagnostic(&self.log_path(d), exit);
-            self.crashed.insert(d.id, diagnostic);
+            if let Some(diagnostic) = exit_diagnostic(&self.log_path(d), exit) {
+                self.crashed.insert(d.id, diagnostic);
+            } else {
+                self.crashed.remove(&d.id);
+            }
         }
         self.active.remove(&d.id);
         // Never remove unknown/stale emulator locks automatically.
@@ -598,7 +684,11 @@ impl Engine for Android {
         for (id, exit) in dead {
             self.active.remove(&id);
             let log = self.home.join(format!("mes_{}.log", id.simple()));
-            self.crashed.insert(id, crash_diagnostic(&log, exit));
+            if let Some(diagnostic) = exit_diagnostic(&log, exit) {
+                self.crashed.insert(id, diagnostic);
+            } else {
+                self.crashed.remove(&id);
+            }
         }
         let budget = crate::budget::Budget::from_host(&crate::host::detect())?;
         if !budget.fits(std::iter::empty(), &d.spec) {
@@ -644,7 +734,7 @@ impl Engine for Android {
             "-gpu",
             d.spec.graphics_mode.emulator_arg(),
         ]);
-        if std::env::var_os("MES_HEADLESS").as_deref() == Some(std::ffi::OsStr::new("1")) {
+        if std::env::var_os("MES_HEADLESS").as_deref() != Some(std::ffi::OsStr::new("0")) {
             launch.arg("-no-window");
         }
         let child = launch
@@ -694,16 +784,23 @@ impl Engine for Android {
         };
         if let Some(exit) = instance.child.try_wait()? {
             self.active.remove(&d.id);
-            let diagnostic =
-                crash_diagnostic(&self.home.join(format!("{}.log", d.avd_name())), exit);
-            self.crashed.insert(d.id, diagnostic.clone());
+            let diagnostic = exit_diagnostic(&self.log_path(d), exit);
+            if let Some(message) = &diagnostic {
+                self.crashed.insert(d.id, message.clone());
+            } else {
+                self.crashed.remove(&d.id);
+            }
             return Ok(Status {
                 id: d.id,
-                state: DeviceState::Crashed,
+                state: if diagnostic.is_some() {
+                    DeviceState::Crashed
+                } else {
+                    DeviceState::Stopped
+                },
                 pid: None,
                 console_port: None,
                 addresses: vec![],
-                diagnostic: Some(diagnostic),
+                diagnostic,
             });
         }
         let port = instance.port;
@@ -845,6 +942,50 @@ impl Engine for Android {
             }
         }
         log_tail(&self.log_path(d), 64 * 1024).map_err(Error::from)
+    }
+    fn screen(&mut self, d: &Device) -> Result<ScreenFrame> {
+        let port = self.ready_port(d)?;
+        capture_png(self.adb_for(port).args(["exec-out", "screencap", "-p"]))
+    }
+    fn navigate(&mut self, d: &Device, key: NavigationKey) -> Result<()> {
+        let key = match key {
+            NavigationKey::Back => "KEYCODE_BACK",
+            NavigationKey::Home => "KEYCODE_HOME",
+            NavigationKey::Recents => "KEYCODE_APP_SWITCH",
+        };
+        let port = self.ready_port(d)?;
+        run(
+            self.adb_for(port).args(["shell", "input", "keyevent", key]),
+            None,
+            SHORT,
+        )?;
+        Ok(())
+    }
+    fn touch(&mut self, d: &Device, input: TouchInput) -> Result<()> {
+        let coordinates = match input {
+            TouchInput::Tap { x, y } => vec![x, y],
+            TouchInput::Swipe { x, y, end_x, end_y } => vec![x, y, end_x, end_y],
+        };
+        if coordinates.iter().any(|&n| n >= 4320) {
+            return Err(Error::Invalid("Touch coordinate out of bounds".into()));
+        }
+        let port = self.ready_port(d)?;
+        let mut cmd = self.adb_for(port);
+        cmd.args([
+            "shell",
+            "input",
+            if coordinates.len() == 2 {
+                "tap"
+            } else {
+                "swipe"
+            },
+        ]);
+        cmd.args(coordinates.iter().map(u32::to_string));
+        if coordinates.len() == 4 {
+            cmd.arg("250");
+        }
+        run(&mut cmd, None, SHORT)?;
+        Ok(())
     }
 }
 impl Drop for Android {

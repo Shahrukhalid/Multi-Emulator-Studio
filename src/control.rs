@@ -23,16 +23,50 @@ pub enum Request {
     List,
     Tick,
     Network,
-    Create { spec: DeviceSpec },
-    CloneProfile { id: Uuid, name: String },
-    Rename { id: Uuid, name: String },
-    Start { id: Uuid },
-    Stop { id: Uuid },
-    Restart { id: Uuid },
-    Status { id: Uuid },
-    Delete { id: Uuid },
-    InstallApk { id: Uuid, path: PathBuf },
-    Logs { id: Uuid },
+    Create {
+        spec: DeviceSpec,
+    },
+    CloneProfile {
+        id: Uuid,
+        name: String,
+    },
+    Rename {
+        id: Uuid,
+        name: String,
+    },
+    Start {
+        id: Uuid,
+    },
+    Stop {
+        id: Uuid,
+    },
+    Restart {
+        id: Uuid,
+    },
+    Status {
+        id: Uuid,
+    },
+    Delete {
+        id: Uuid,
+    },
+    InstallApk {
+        id: Uuid,
+        path: PathBuf,
+    },
+    Logs {
+        id: Uuid,
+    },
+    Screen {
+        id: Uuid,
+    },
+    Navigate {
+        id: Uuid,
+        key: crate::runtime::NavigationKey,
+    },
+    Touch {
+        id: Uuid,
+        input: crate::runtime::TouchInput,
+    },
 }
 pub struct Controller {
     sdk: Sdk,
@@ -94,6 +128,15 @@ impl Controller {
                 json!(true)
             }
             Request::Logs { id } => json!(self.manager.logs(id)?),
+            Request::Screen { id } => json!(self.manager.screen(id)?),
+            Request::Navigate { id, key } => {
+                self.manager.navigate(id, key)?;
+                json!(true)
+            }
+            Request::Touch { id, input } => {
+                self.manager.touch(id, input)?;
+                json!(true)
+            }
         })
     }
 }
