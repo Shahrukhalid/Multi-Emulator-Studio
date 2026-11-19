@@ -5,7 +5,7 @@ use crate::{
 };
 use serde::Serialize;
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     fs,
     io::{Read, Seek, SeekFrom, Write},
     net::TcpListener,
@@ -17,6 +17,22 @@ use std::{
 use uuid::Uuid;
 
 const SHORT: Duration = Duration::from_secs(20);
+
+fn crash_diagnostic(log: &Path, exit: std::process::ExitStatus) -> String {
+    let message = format!("emulator exited: {exit}; see local emulator log");
+    let excerpt = (|| -> std::io::Result<String> {
+        let mut file = fs::File::open(log)?;
+        let start = file.metadata()?.len().saturating_sub(4096);
+        file.seek(SeekFrom::Start(start))?;
+        let mut bytes = Vec::new();
+        file.take(4096).read_to_end(&mut bytes)?;
+        Ok(String::from_utf8_lossy(&bytes).trim().to_owned())
+    })();
+    match excerpt {
+        Ok(tail) if !tail.is_empty() => format!("{message}\n{tail}"),
+        _ => message,
+    }
+}
 
 /// No shell interpolation. Bounded process output is kept in temporary files.
 pub fn run(cmd: &mut Command, stdin: Option<&str>, timeout: Duration) -> Result<String> {
@@ -202,7 +218,7 @@ pub struct Android {
     sdk: Sdk,
     home: PathBuf,
     active: HashMap<Uuid, Instance>,
-    crashed: HashSet<Uuid>,
+    crashed: HashMap<Uuid, String>,
 }
 impl Android {
     pub fn new(sdk: Sdk, home: PathBuf) -> Result<Self> {
@@ -212,7 +228,7 @@ impl Android {
             sdk,
             home: home.canonicalize()?,
             active: HashMap::new(),
-            crashed: HashSet::new(),
+            crashed: HashMap::new(),
         })
     }
     pub fn sdk(&self) -> &Sdk {
@@ -371,13 +387,14 @@ impl Engine for Android {
             .active
             .iter_mut()
             .filter_map(|(id, i)| match i.child.try_wait() {
-                Ok(Some(_)) => Some(*id),
+                Ok(Some(exit)) => Some((*id, exit)),
                 _ => None,
             })
             .collect();
-        for id in dead {
+        for (id, exit) in dead {
             self.active.remove(&id);
-            self.crashed.insert(id);
+            let log = self.home.join(format!("mes_{}.log", id.simple()));
+            self.crashed.insert(id, crash_diagnostic(&log, exit));
         }
         let budget = crate::budget::Budget::from_host(&crate::host::detect())?;
         if !budget.fits(std::iter::empty(), &d.spec) {
@@ -449,7 +466,7 @@ impl Engine for Android {
     fn status(&mut self, d: &Device) -> Result<Status> {
         let Some(instance) = self.active.get_mut(&d.id) else {
             let state = if self.assert_idle(d).is_ok() {
-                if self.crashed.contains(&d.id) {
+                if self.crashed.contains_key(&d.id) {
                     DeviceState::Crashed
                 } else {
                     DeviceState::Stopped
@@ -463,19 +480,21 @@ impl Engine for Android {
                 pid: None,
                 console_port: None,
                 addresses: vec![],
-                diagnostic: None,
+                diagnostic: self.crashed.get(&d.id).cloned(),
             });
         };
-        if instance.child.try_wait()?.is_some() {
+        if let Some(exit) = instance.child.try_wait()? {
             self.active.remove(&d.id);
-            self.crashed.insert(d.id);
+            let diagnostic =
+                crash_diagnostic(&self.home.join(format!("{}.log", d.avd_name())), exit);
+            self.crashed.insert(d.id, diagnostic.clone());
             return Ok(Status {
                 id: d.id,
                 state: DeviceState::Crashed,
                 pid: None,
                 console_port: None,
                 addresses: vec![],
-                diagnostic: None,
+                diagnostic: Some(diagnostic),
             });
         }
         let port = instance.port;
@@ -493,7 +512,10 @@ impl Engine for Android {
             .unwrap_or(false);
         if !ready && should_timeout {
             self.stop(d)?;
-            self.crashed.insert(d.id);
+            self.crashed.insert(
+                d.id,
+                "emulator boot timed out; see local emulator log".into(),
+            );
             return Err(Error::Timeout("emulator boot".into()));
         }
         let state = if ready {

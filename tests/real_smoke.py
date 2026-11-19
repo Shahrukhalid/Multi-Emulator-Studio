@@ -13,7 +13,8 @@ def main():
     sdk = pathlib.Path(sys.argv[1]).resolve()
     binary = pathlib.Path("target/debug/multi-emulator-core" + (".exe" if os.name == "nt" else "")).resolve()
     adb = sdk / "platform-tools" / ("adb.exe" if os.name == "nt" else "adb")
-    env = dict(os.environ, MES_HEADLESS="1")
+    env = dict(os.environ)
+    env.setdefault("MES_HEADLESS", "1")
     # Retain failure logs in the selected repository's disposable test directory.
     root = pathlib.Path(tempfile.mkdtemp(prefix="mes-smoke-", dir="target")).resolve()
     print(f"Smoke directory: {root}", flush=True)
@@ -46,7 +47,7 @@ def main():
         while time.monotonic()<deadline:
             statuses=[call("status",id=i) for i in ids]
             print("STATES",[s["state"] for s in statuses],flush=True)
-            if any(s["state"] in ("crashed","unknown","stopped") for s in statuses): raise RuntimeError("device failed to boot")
+            if any(s["state"] in ("crashed","unknown","stopped") for s in statuses): raise RuntimeError(f"device failed to boot: {statuses}")
             if all(s["state"]=="ready" for s in statuses): break
             time.sleep(5)
         else: raise RuntimeError("boot deadline exceeded")

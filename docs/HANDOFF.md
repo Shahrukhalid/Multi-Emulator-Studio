@@ -1,6 +1,6 @@
 # Multi-Emulator Studio — foundation handoff
 
-**Development only. M0 and M1 implemented in milestone branches; M2 partially implemented and runtime-unverified. No commercial release or passed merge gate.**
+**Development only. M0 and M1 merged into main; M2 remains draft pending simultaneous Android boot. No commercial release.**
 
 ## Changes and PRs
 
@@ -10,15 +10,21 @@
 | M1 | [#2](https://github.com/Shahrukhalid/Multi-Emulator-Studio/pull/2) | eeb5e882fc33a0880ebd5ce67876f5df04490e09 | Official SDK, lifecycle, controller, Tauri 2/TypeScript panel, resource queue, desktop checks |
 | M2 | [#3](https://github.com/Shahrukhalid/Multi-Emulator-Studio/pull/3) | See branch head | Port identity diagnostics, crash state, network overlap report, tests, real-host smoke test, handoff |
 
-PRs are stacked. Merge in order only after required checks pass. Do not publish a commercial release.
+M0 and M1 merged after green CI. M2 targets main and remains draft pending actual runtime verification. Do not publish a commercial release.
 
 ## Follow-up hardening
 
 Moved desktop queue/health supervision into a native backend worker; the webview reads cached statuses. Failed queued starts are removed from automatic retries and retain a per-device diagnostic until explicit retry/stop. Failed status queries do not block other profiles. Official avdmanager hardware profile discovery is exposed as a constrained dropdown. The installed SDK returned real profile IDs, including pixel_6.
 
-Local equivalent changes passed seven Rust unit tests, core and desktop Clippy, desktop cargo check and TypeScript build. The local execution environment disconnected before export; this commit reconstructs those changes from the tested diffs. Remote byte-for-byte verification, CI and real boot remain pending.
+Local equivalent changes passed seven Rust unit tests, core and desktop Clippy, desktop cargo check and TypeScript build. The local execution environment disconnected before export; this commit reconstructs those changes from the tested diffs. Both macOS and Windows core and desktop CI subsequently passed on commit 56b2148. Real boot remains pending.
 
-## Actual verification
+## Latest runtime attempts (2026-11-19)
+
+The restored macOS environment allowed loopback binding. Two disposable AVDs were created, started with distinct PIDs and console port pairs (5554/5555 and 5556/5557), and deleted by cleanup. In headless mode the installed official Android Emulator 37.2.13.0 failed during native initialization (`EXC_BAD_INSTRUCTION`, `SIGILL`, `init_cache_info`). In a single bounded retry using the official windowed mode (`MES_HEADLESS=0`), both exited with `SIGABRT`; the emulator reported `Incompatible processor. This Qt build requires the following features: neon`. The host's relevant CPU feature query returned Operation not permitted. Do not bypass environment restrictions. Neither instance booted; guest settings, APK/data isolation and restart recovery remain unverified. Crash reporting now preserves the process exit status and a bounded local log excerpt. The smoke test supports explicit windowed execution and reports per-device errors. Seven core unit tests and Clippy passed after the diagnostic change.
+
+Development package/security gate started on M2 commit 56b2148: [run 44450185915](https://github.com/Shahrukhalid/Multi-Emulator-Studio/actions/runs/44450185915). Artifacts are not yet verified. No commercial release.
+
+## Earlier verification
 
 Apple Silicon macOS, aarch64, 10 logical CPU cores, 16 GiB RAM, approximately 11 GiB free disk at test time, Rust 1.91.1. Official SDK installed, Android 14/API 34 Google APIs arm64-v8a image. Emulator acceleration returned code 0 with Hypervisor.Framework. No SDK images or credentials were committed.
 
@@ -41,7 +47,7 @@ Real Android integration:
 - Start failed before emulator spawn: loopback console/ADB port reservation could not succeed. A direct socket-bind diagnostic returned PermissionError: [Errno 1] Operation not permitted on 127.0.0.1:5554. Do not bypass this environment restriction.
 - Neither emulator booted. Real concurrent runtime, app-data isolation, APK install, guest IP observation, restart persistence and crash recovery remain unverified.
 
-Windows compile, packaging and runtime: **not verified**. GitHub Actions M0 run 44441292175 and M1 runs 44442685185/44442685316 failed; GitHub displayed that jobs did not start because recent account payments failed or spending limit needs to be increased. Account owner must resolve billing. No paid service was activated, no check bypassed, no retries.
+Windows compile: verified green through GitHub Actions, as were macOS core/desktop checks. Initial billing-related failures were retried after the repository became public. M0 run 44441292175, M1 runs 44442685185/44442685316 and M2 runs 44445895113/44445895125 passed. Windows runtime and installer packaging remain separate gates.
 
 ## API contracts
 
