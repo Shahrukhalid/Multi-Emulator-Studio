@@ -19,3 +19,15 @@ The desktop shell uses `cd desktop`, `npm ci`, `npm run build`, `cargo run --loc
 The advanced Settings page can also install the fixed runtime packages from an existing SDK directory after licenses are accepted. The installer does not automatically accept licenses. Existing profiles keep their original SDK; do not silently migrate them. For runtime verification, build the core with `cargo build --locked` and run `python3 tests/real_smoke.py SDK_DIRECTORY` on a compatible physical host with Android 14, Android build tools and hardware acceleration. A nonzero exit or missing run is not a release pass.
 
 For an explicitly selected graphics-compatibility test on a compatible host, run `python3 tests/real_smoke.py SDK_DIRECTORY --graphics software`. The default is `--graphics auto`. Run only one test at a time; both modes require hardware virtualization and create disposable profiles. A successful probe alone does not prove boot readiness. If the official emulator exits with an illegal-instruction error, check the official emulator and host compatibility before retrying; software graphics is not a proven solution for that error.
+
+## Clean-machine acceptance checklist
+
+On a supported clean physical macOS or Windows host with no Android Studio, Java or SDK installed, verify the development installer opens normally. Use a new test OS account or disposable host; never remove an existing user's SDK or profile data to simulate this condition.
+
+1. Launch the application, open Quick setup, review Android SDK terms, and start setup. Confirm it shows downloads and every required license prompt. Decline a license first; it must not connect or claim success.
+2. Retry and accept the licenses individually. Switch away from Settings and return during setup; the installer log and prompt must still be accessible. Cancel a running install and verify it stops before retrying.
+3. Complete installation, confirm the private SDK and Java directories exist and no system-wide Java or Android Studio installation was required. Restart the app and check that it reconnects to the managed SDK.
+4. Verify official emulator and acceleration probes, create two disposable Google Play devices, confirm each boots with Play Store and YouTube, test local navigation, stop and restart, then run the two-device smoke benchmark. Record failures honestly; package detection alone is not boot verification.
+5. Verify existing-device upgrade separately with a backed-up test profile. Keep its original SDK path and app data intact.
+
+This is a manual acceptance gate, not a claim that these tests have passed.

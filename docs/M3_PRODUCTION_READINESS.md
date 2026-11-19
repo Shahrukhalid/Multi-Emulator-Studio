@@ -126,3 +126,9 @@ No production merge or release until the applicable gates are verified. A CI-gen
 - Add opt-in Quick setup for new users. Download official host-specific Android command-line tools (published SHA-256 pin), and Temurin Java from official metadata with the published archive checksum, into private application data. Verify downloads before extraction; use the official SDK manager to install platform tools, emulator and the Google Play Android 14 image. No separate Android Studio installation, silent license acceptance or SDK redistribution.
 - Show official installer output and require a separate explicit user response to each license prompt. Keep legacy profiles on their existing SDK. Report package validation independently from emulator compatibility; an installed image does not prove successful boot or YouTube presence.
 - Clean-machine download, license interactions, Windows setup, macOS native emulator launch, actual Play Store/YouTube checks and encoded video streaming are not yet verified. Production release remains blocked.
+
+## M4.7 — first-run setup reliability
+
+- Maintain setup phase, installer log and pending license state independently of Settings DOM. Re-rendering cannot lose the active session or prompt; competing license actions are serialized and a failed cancellation does not pretend setup stopped.
+- Added automated desktop tests for separate license responses, duplicate clicks, cancellation retry, diagnostic retention and preventing connection after a failed installation. Run them on macOS and Windows in desktop CI.
+- Actual clean-host downloads, boot, app availability and native encoded streaming remain separate release gates.

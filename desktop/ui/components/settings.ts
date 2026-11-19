@@ -1,4 +1,5 @@
 import { HostInfo, SdkInfo, NetworkReport, SetupStatus } from '../types.js';
+import { ManagedSetupFlow } from '../managed_setup_flow.js';
 
 export interface SettingsCallbacks {
   onManagedStart: () => Promise<string>;
@@ -32,8 +33,7 @@ export class SettingsComponent {
   private connected = false;
   private installing = false;
   private installMessage = '';
-  private managedMessage = '';
-  private managedLog = '';
+  private managedFlow: ManagedSetupFlow;
 
   constructor(
     host: HostInfo | null,
@@ -62,6 +62,12 @@ export class SettingsComponent {
 
     this.element = document.createElement('div');
     this.element.className = 'settings-view';
+    this.managedFlow = new ManagedSetupFlow(callbacks, () => {
+      const wasInstalling = this.installing;
+      this.installing = this.managedFlow.active;
+      if (wasInstalling !== this.installing) this.render();
+      else this.paintManagedSetup();
+    });
     this.render();
   }
 
@@ -313,52 +319,15 @@ export class SettingsComponent {
     const confirm = this.element.querySelector('#runtime-license-confirm') as HTMLInputElement;
     const managedStart = this.element.querySelector<HTMLButtonElement>('#managed-start');
     const consent = this.element.querySelector<HTMLInputElement>('#managed-consent');
-    const managedResult = this.element.querySelector('#managed-result');
-    if (managedResult) managedResult.textContent = this.managedMessage;
-    const previousOutput = this.element.querySelector<HTMLPreElement>('#managed-output');
-    if (previousOutput && this.managedLog) { previousOutput.textContent = this.managedLog; previousOutput.hidden = false; }
     consent?.addEventListener('change', () => { if (managedStart) managedStart.disabled = !consent.checked || this.installing; });
     managedStart?.addEventListener('click', async () => {
       if (this.installing || !consent?.checked) return;
-      this.installing = true;
-      this.managedLog = '';
-      managedStart.disabled = true; consent.disabled = true;
-      const output = this.element.querySelector<HTMLPreElement>('#managed-output')!;
-      const actions = this.element.querySelector<HTMLElement>('#managed-actions')!;
-      const yes = this.element.querySelector<HTMLButtonElement>('#managed-yes')!;
-      const no = this.element.querySelector<HTMLButtonElement>('#managed-no')!;
-      const cancel = this.element.querySelector<HTMLButtonElement>('#managed-cancel')!;
-      let cancelled = false;
-      const answer = async (accept: boolean) => {
-        yes.disabled = no.disabled = true;
-        try { await this.callbacks.onManagedAnswer(accept); }
-        catch (error) { if (managedResult) managedResult.textContent = String(error); }
-      };
-      yes.onclick = () => void answer(true); no.onclick = () => void answer(false);
-      cancel.onclick = async () => { cancelled = true; await this.callbacks.onManagedCancel().catch(() => {}); };
-      try {
-        if (managedResult) managedResult.textContent = 'Downloading and verifying official tools and private Java…';
-        const sdk = await this.callbacks.onManagedStart();
-        output.hidden = false; actions.hidden = false;
-        if (managedResult) managedResult.textContent = 'Installing Android packages. Read and respond to each official license prompt.';
-        while (!cancelled) {
-          const state = await this.callbacks.onManagedStatus();
-          if (output.textContent !== state.output) { this.managedLog = state.output; output.textContent = state.output; output.scrollTop = output.scrollHeight; }
-          yes.disabled = no.disabled = !state.awaiting_answer;
-          if (state.done) {
-            if (!state.success) throw new Error('Official package setup did not finish. Review the installer output and retry.');
-            this.managedMessage = 'Official Android packages installed. Checking emulator compatibility…';
-            await this.callbacks.onManagedConnect(sdk);
-            break;
-          }
-          await new Promise(resolve => window.setTimeout(resolve, 1000));
-        }
-        if (cancelled) this.managedMessage = 'Setup cancelled. Open Quick setup to retry.';
-      } catch (error: unknown) {
-        this.managedMessage = 'Setup failed: ' + ((error as { message?: string }).message || String(error));
-        await this.callbacks.onManagedCancel().catch(() => {});
-      } finally { this.installing = false; this.render(); }
+      await this.managedFlow.start();
     });
+    this.element.querySelector('#managed-yes')?.addEventListener('click', () => void this.managedFlow.answer(true));
+    this.element.querySelector('#managed-no')?.addEventListener('click', () => void this.managedFlow.answer(false));
+    this.element.querySelector('#managed-cancel')?.addEventListener('click', () => void this.managedFlow.cancel());
+    this.paintManagedSetup();
     const install = this.element.querySelector('#btn-install-runtime') as HTMLButtonElement;
     const connect = this.element.querySelector('#btn-connect-sdk') as HTMLButtonElement;
     const result = this.element.querySelector('#runtime-install-result') as HTMLElement;
@@ -425,5 +394,28 @@ export class SettingsComponent {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+  }
+
+  private paintManagedSetup(): void {
+    const state = this.managedFlow.snapshot;
+    const result = this.element.querySelector('#managed-result');
+    if (result) result.textContent = state.message;
+    const output = this.element.querySelector<HTMLPreElement>('#managed-output');
+    if (output) {
+      output.hidden = !state.output && state.phase !== 'installing';
+      if (output.textContent !== state.output) {
+        const atBottom = output.scrollHeight - output.scrollTop - output.clientHeight < 30;
+        output.textContent = state.output;
+        if (atBottom || state.awaitingAnswer) output.scrollTop = output.scrollHeight;
+      }
+    }
+    const actions = this.element.querySelector<HTMLElement>('#managed-actions');
+    if (actions) actions.hidden = state.phase !== 'installing';
+    for (const id of ['#managed-yes', '#managed-no']) {
+      const button = this.element.querySelector<HTMLButtonElement>(id);
+      if (button) button.disabled = !state.awaitingAnswer || state.actionPending;
+    }
+    const cancel = this.element.querySelector<HTMLButtonElement>('#managed-cancel');
+    if (cancel) cancel.disabled = state.actionPending;
   }
 }

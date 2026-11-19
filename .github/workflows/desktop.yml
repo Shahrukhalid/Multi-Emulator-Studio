@@ -48,6 +48,7 @@ jobs:
       - run: npm run build
       - run: node --test verify-packages.test.mjs
       - run: node --test frame-scheduler.test.mjs
+      - run: node --test managed-setup-flow.test.mjs
       - run: cargo +stable fmt --check
       - run: cargo +stable clippy --locked --all-targets -- -D warnings
       - run: cargo +stable test --locked
