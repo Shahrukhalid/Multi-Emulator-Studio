@@ -20,8 +20,10 @@ jobs:
         include:
           - os: macos-15
             bundle: dmg
+            artifact: development-adhoc-macOS-ARM64
           - os: windows-2022
             bundle: nsis
+            artifact: development-unsigned-Windows-X64
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     defaults:
@@ -53,11 +55,18 @@ jobs:
       - run: cargo install tauri-cli --version 2.12.4 --locked
       # Never validate stale bundles restored from the build cache.
       - run: node -e "require('node:fs').rmSync('target/release/bundle', {recursive:true, force:true})"
-      - run: cargo tauri build --bundles ${{ matrix.bundle }} --no-sign --ci -- --locked
+      - if: runner.os == 'macOS'
+        env:
+          APPLE_SIGNING_IDENTITY: '-'
+        run: cargo tauri build --bundles dmg --ci -- --locked
+      - if: runner.os == 'macOS'
+        run: bash verify-development-macos.sh target/release/bundle
+      - if: runner.os == 'Windows'
+        run: cargo tauri build --bundles nsis --no-sign --ci -- --locked
       - run: node verify-packages.mjs target/release/bundle ${{ matrix.bundle }}
       - uses: actions/upload-artifact@v4
         with:
-          name: development-unsigned-${{ runner.os }}-${{ runner.arch }}
+          name: ${{ matrix.artifact }}
           path: |
             desktop/target/release/bundle/**/*.dmg
             desktop/target/release/bundle/**/*.exe

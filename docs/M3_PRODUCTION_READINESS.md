@@ -73,3 +73,9 @@ No production merge or release until the applicable gates are verified. A CI-gen
 - A downloaded unsigned development build was rejected by macOS as damaged. This alert alone does not establish the exact signature defect; do not override Gatekeeper.
 - Add an owner-approved manual Developer ID signing and notarization job with a protected environment, explicit credential checks, temporary signing keychain, accepted notarization, stapled ticket validation, read-only DMG verification, app signature and Gatekeeper assessment, and final checksums. Ordinary PR artifacts remain clearly labeled unsigned.
 - Owner certificate and notarization credentials are required before the new signed candidate can be built. See `docs/MACOS_SIGNING.md`. Production release remains blocked until signed build verification and real runtime testing succeed.
+
+## Ninth increment — free local development signing
+
+- Use Tauri's ad-hoc signing identity for ordinary Apple Silicon development builds; verify app signature and read-only DMG contents before uploading an explicitly labeled development artifact. Do not claim that the artifact is notarized or accepted by Gatekeeper when downloaded.
+- Retain the protected Developer ID workflow for future public distribution. No Apple account is needed for local builds from source. Actual Android runtime remains an independent verification gate.
+- Local macOS development bundle built with Tauri 2.12.4 and `APPLE_SIGNING_IDENTITY=-`; `codesign --verify --deep --strict` passed and the signature was reported as ad-hoc. No notarization or guest boot success is asserted.
