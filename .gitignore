@@ -3,6 +3,7 @@
 /desktop/node_modules/
 /desktop/dist/
 /desktop/icons/
+/desktop/gen/
 *.db
 *.db-wal
 *.db-shm

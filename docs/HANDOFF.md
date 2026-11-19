@@ -90,3 +90,16 @@ DeviceSpec: name, image, hardware_profile, ram_mb, cores, width, height, disk_mb
 ## Production GUI instructions for Antigravity
 
 Start from milestone/m2-verification after checks and real-runtime blockers are resolved. Preserve Rust Engine, typed dispatcher, database and controller lock. Build polished device grid/list, create wizard, SDK onboarding and explicit license handling, lifecycle/health indicators, budget and queue view, APK picker, local logs and network limitations. Native pickers and deletion confirmations; never expose arbitrary shell or ADB commands. Show unavailable/error/queued/unknown states truthfully. Keep licensing separate, do not bundle restricted images or upload device data, preserve copyright and third-party notices, and avoid contributor trailers/branding. Verify actual backend calls and both platforms before release.
+
+## Antigravity Commercial UI Implementation (2026-11-19)
+
+Completed full commercial UI redesign on branch `feature/antigravity-ui` based on `milestone/m2-verification` commit `24798b3`.
+
+- **Navigation**: Clean 3-tab layout containing only **My Devices**, **Templates**, and **Settings**, plus a prominent **+ Create Device** button. All developer-centric panels (raw IP/MAC metrics, ADB ports, webview diagnostics) removed from primary navigation and safely consolidated inside **Developer Mode** in Settings.
+- **Visual Design**: High-fidelity native desktop styling (macOS HIG / Windows Fluent inspired) with light and dark theme support, custom vector device illustrations (Standard Phone, Large Phone, Tablet, Foldable, iOS Simulator, Welcome Hero), restrained accent styling, and zero generic dashboards.
+- **First Launch**: Dedicated welcome hero with truthful platform options (Android ready, iOS Simulator with clear macOS-only limitation notice).
+- **Creation Wizard**: 5-step phone-style flow (Platform -> Form Factor Cards -> Friendly OS versions without raw package IDs -> Device Name -> Collapsible Advanced Settings for RAM/CPU/resolution/storage).
+- **Device Management**: Clean device cards with vector art, friendly status indicators (`Ready`, `Starting`, `Stopped`, `Crashed`, `Queued`), single context-aware primary button (`Start`/`Open`/`Retry`), and `···` overflow context menu for APK install, renaming, duplicating, and deletion with permanent data-loss warning.
+- **Templates**: Curated catalog of pre-configured Android profiles (Pixel 8, Pixel 7 Pro, Pixel Tablet, Low-spec testing profile).
+- **Backend Safety**: Strictly preserved Rust backend, SQLite persistence, and Tauri 2 IPC contracts (`default_data_dir`, `connect`, `dispatch`, `health`). In browser preview mode, displays an honest top banner with read-only controls and truthful desktop requirement notices.
+- **Verification**: 12/12 Rust unit tests passed, Core and Desktop Clippy 0 warnings, cargo fmt clean, TypeScript compiled with 0 errors, automated headless browser verification passed. Detailed report available at `docs/UI_RELEASE_REPORT.md`.
