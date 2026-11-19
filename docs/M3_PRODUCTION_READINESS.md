@@ -79,3 +79,9 @@ No production merge or release until the applicable gates are verified. A CI-gen
 - Use Tauri's ad-hoc signing identity for ordinary Apple Silicon development builds; verify app signature and read-only DMG contents before uploading an explicitly labeled development artifact. Do not claim that the artifact is notarized or accepted by Gatekeeper when downloaded.
 - Retain the protected Developer ID workflow for future public distribution. No Apple account is needed for local builds from source. Actual Android runtime remains an independent verification gate.
 - Local macOS development bundle built with Tauri 2.12.4 and `APPLE_SIGNING_IDENTITY=-`; `codesign --verify --deep --strict` passed and the signature was reported as ad-hoc. No notarization or guest boot success is asserted.
+
+## M4 — live application verification
+
+- Local launch through macOS LaunchServices returned `kLSNoExecutableErr` (-10827) for both the original Tauri bundle and a local copy. The bundle's Info.plist identifies the present executable, which is a permissioned ARM64 Mach-O binary with a valid ad-hoc signature. The root cause of the LaunchServices failure is not established.
+- Explicitly validate Info.plist, application package type, executable path and permissions, ARM64 architecture and code signature for both original and mounted development bundles and the future notarized bundle. These checks do not substitute for observed GUI launch.
+- The owner must verify normal Finder launch on a compatible desktop session, then verify the official Android emulator independently and run the full disposable two-device smoke test. No security overrides or forced launches were performed. Production release remains blocked.

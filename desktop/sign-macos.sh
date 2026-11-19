@@ -58,7 +58,7 @@ hdiutil attach -readonly -nobrowse -mountpoint "$mountpoint" "$dmg"
 mounted=1
 apps=("$mountpoint"/*.app)
 [[ ${#apps[@]} -eq 1 ]] || { echo 'Expected exactly one application in DMG' >&2; exit 1; }
-codesign --verify --deep --strict --verbose=2 "${apps[0]}"
+bash verify-macos-app.sh "${apps[0]}"
 spctl --assess --type execute --verbose=2 "${apps[0]}"
 hdiutil detach "$mountpoint"
 mounted=0
