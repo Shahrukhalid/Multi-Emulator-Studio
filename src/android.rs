@@ -687,11 +687,21 @@ impl Android {
         let mut command = self.command(&self.sdk.adb);
         command.args(["-t", &transport.to_string(), "exec-out", "screencap", "-p"]);
         use std::sync::atomic::Ordering;
-        SCREEN_WORKERS
-            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |n| {
-                (n < 2).then_some(n + 1)
-            })
-            .map_err(|_| Error::Unavailable("Screen workers busy; retrying".into()))?;
+        let mut workers = SCREEN_WORKERS.load(Ordering::Acquire);
+        loop {
+            if workers >= 2 {
+                return Err(Error::Unavailable("Screen workers busy; retrying".into()));
+            }
+            match SCREEN_WORKERS.compare_exchange_weak(
+                workers,
+                workers + 1,
+                Ordering::AcqRel,
+                Ordering::Acquire,
+            ) {
+                Ok(_) => break,
+                Err(current) => workers = current,
+            }
+        }
         Ok(ScreenCapture { command })
     }
     fn owns_port(&self, d: &Device, port: u16) -> bool {
