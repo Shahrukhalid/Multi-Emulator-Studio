@@ -90,10 +90,16 @@ export class App {
       {
         onThemeChange: (theme) => this.applyTheme(theme),
         onDataDirChange: async (path, sdkRoot) => {
-          await this.api.connect(path, sdkRoot);
-          this.dataDir = path;
-          toast.show('Data directory saved', 'success');
-          await this.refreshAll();
+          try {
+            await this.api.connect(path, sdkRoot);
+            this.dataDir = path;
+            this.isConnected = true;
+            toast.show('Android runtime connected', 'success');
+            await this.refreshAll();
+            this.startHealthPolling();
+          } catch (err: unknown) {
+            toast.show(`Connection failed: ${(err as { message?: string }).message || String(err)}`, 'error');
+          }
         },
         onCheckSdk: async () => {
           await this.refreshSdkCatalog();
@@ -116,10 +122,15 @@ export class App {
       this.dataDir = await this.api.getDefaultDataDir().catch(() => '');
 
       if (this.api.isTauri && this.dataDir) {
-        await this.api.connect(this.dataDir).catch((e) => {
-          console.warn('Initial connect caught:', e);
-        });
-        this.isConnected = true;
+        try {
+          await this.api.connect(this.dataDir);
+          this.isConnected = true;
+        } catch (err: unknown) {
+          toast.show(`Android setup required: ${(err as { message?: string }).message || String(err)}`, 'warning');
+          this.settings.setConnection(this.dataDir, false);
+          this.switchTab('settings');
+          return;
+        }
       }
 
       await this.refreshAll();
@@ -159,6 +170,7 @@ export class App {
         this.images.length,
         this.networkReport
       );
+      this.settings.setConnection(this.dataDir, this.isConnected);
     } catch (err) {
       console.error('Catalog refresh error:', err);
     }
@@ -246,7 +258,7 @@ export class App {
   }
 
   private handleOpen(device: Device): void {
-    toast.show(`${device.spec.name} is active on host desktop`, 'info');
+    toast.show(`${device.spec.name} runs in a separate Android Emulator window. Select it from your taskbar or Dock.`, 'info');
   }
 
   private async handleStop(device: Device): Promise<void> {
@@ -271,7 +283,7 @@ export class App {
       const status = await this.api.restartDevice(device.id);
       this.deviceList.updateSingleStatus(status);
       await this.refreshDevices();
-      toast.show(`${device.spec.name} restarted`, 'success');
+      toast.show(`${device.spec.name}: ${status.state}`, status.state === 'ready' ? 'success' : 'info');
     } catch (err: unknown) {
       const msg = (err as { message?: string }).message || String(err);
       toast.show(`Restart failed: ${msg}`, 'error');
@@ -287,8 +299,7 @@ export class App {
 
     toast.show('Updating device name...', 'info');
     try {
-      await this.api.cloneDevice(device.id, newName.trim());
-      await this.api.deleteDevice(device.id);
+      await this.api.renameDevice(device.id, newName.trim());
       await this.refreshDevices();
       toast.show(`Device renamed to ${newName.trim()}`, 'success');
     } catch (err: unknown) {
@@ -335,6 +346,11 @@ export class App {
   }
 
   private openWizard(initialPreset?: DevicePreset): void {
+    if (!this.api.isPreview && (!this.isConnected || !this.images.length || !this.hardwareProfiles.length)) {
+      toast.show('Connect the official Android SDK and install a compatible system image before creating a device.', 'warning');
+      this.switchTab('settings');
+      return;
+    }
     const modal = new WizardComponent(
       this.images,
       this.hardwareProfiles,

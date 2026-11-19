@@ -41,7 +41,7 @@ export class WizardComponent {
     this.callbacks = callbacks;
     if (initialPreset) this.selectedPreset = initialPreset;
 
-    this.selectedImage = this.installedImages[0] || 'system-images;android-34;google_apis;x86_64';
+    this.selectedImage = this.installedImages[0] || '';
 
     this.element = document.createElement('div');
     this.element.className = 'modal-backdrop';
@@ -69,18 +69,18 @@ export class WizardComponent {
                 }>${v.versionName} (${v.tag})</option>`
             )
             .join('')
-        : `<option value="system-images;android-34;google_apis;x86_64">Android 14 (Google APIs)</option>`;
+        : `<option value="">No compatible images installed</option>`;
 
     // Hardware profiles fallback
     const resolvedHardwareProfile =
       this.hardwareProfiles.includes(this.selectedPreset.hardwareProfileId)
         ? this.selectedPreset.hardwareProfileId
-        : this.hardwareProfiles[0] || 'pixel_6';
+        : this.hardwareProfiles[0] || '';
 
     // Default recommended RAM and cores based on host
     const hostRamMb = this.host?.ram_mb ?? 16384;
     const defaultRam = Math.min(this.selectedPreset.recommendedRamMb, Math.max(2048, Math.floor(hostRamMb / 4)));
-    const defaultCores = Math.min(this.selectedPreset.recommendedCores, Math.max(2, (this.host?.cores ?? 4) / 2));
+    const defaultCores = Math.min(this.selectedPreset.recommendedCores, Math.max(1, Math.floor((this.host?.cores ?? 4) / 2)));
 
     this.element.innerHTML = `
       <div class="modal-window">
@@ -110,7 +110,7 @@ export class WizardComponent {
                 <div style="color: var(--text-secondary);">${Icons.apple}</div>
                 <div>
                   <div class="choice-name">iOS Simulator</div>
-                  <div class="choice-desc">${isMac ? 'Apple Xcode' : 'macOS only'}</div>
+                  <div class="choice-desc">${isMac ? 'Not implemented' : 'Not supported'}</div>
                 </div>
               </div>
             </div>
@@ -147,7 +147,7 @@ export class WizardComponent {
             <select class="form-select-input" id="wiz-os-select">
               ${versionOptions}
             </select>
-            <span class="form-helper-text">Discovered compatible Android system images on your system.</span>
+            <span class="form-helper-text">Only installed, compatible Android system images are available.</span>
           </div>
 
           <!-- Step 4: Configuration -->
@@ -194,7 +194,7 @@ export class WizardComponent {
                       <input type="number" class="form-text-input" id="wiz-disk" value="8192" min="2048" max="131072" />
                     </div>
                     <div>
-                      <label class="form-helper-text" for="wiz-locale">Language & Region</label>
+                      <label class="form-helper-text" for="wiz-locale">Language & Region (stored preference only)</label>
                       <input type="text" class="form-text-input" id="wiz-locale" value="en-US" />
                     </div>
                   </div>
@@ -206,7 +206,7 @@ export class WizardComponent {
 
         <div class="modal-actions">
           <button type="button" class="nav-item" id="btn-wizard-cancel" style="padding: 8px 16px;">Cancel</button>
-          <button type="button" class="btn-create-primary" id="btn-wizard-submit">
+          <button type="button" class="btn-create-primary" id="btn-wizard-submit" ${!this.installedImages.length || !resolvedHardwareProfile ? 'disabled' : ''}>
             <span>Create & Launch Device</span>
           </button>
         </div>

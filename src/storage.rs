@@ -63,6 +63,20 @@ impl Store {
         }
         Ok(())
     }
+    /// Change the display name without recreating the virtual device.
+    pub fn rename(&self, id: Uuid, name: String) -> Result<Device> {
+        let mut d = self.get(id)?;
+        d.spec.name = name;
+        d.spec.validate()?;
+        if self.0.execute(
+            "UPDATE devices SET data=?1 WHERE id=?2",
+            params![serde_json::to_string(&d)?, id.to_string()],
+        )? != 1
+        {
+            return Err(Error::Invalid("unknown device".into()));
+        }
+        Ok(d)
+    }
     pub fn set_config(&self, key: &str, value: &str) -> Result<()> {
         self.0.execute(
             "INSERT INTO config VALUES(?1,?2) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
@@ -80,6 +94,19 @@ impl Store {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn rename_persists_without_new_identity() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("test.db");
+        let s = Store::open(&path).unwrap();
+        let d = Device::new(crate::model::sample()).unwrap();
+        s.insert(&d).unwrap();
+        assert_eq!(s.rename(d.id, "Updated".into()).unwrap().id, d.id);
+        drop(s);
+        let s = Store::open(&path).unwrap();
+        assert_eq!(s.list().unwrap().len(), 1);
+        assert_eq!(s.get(d.id).unwrap().spec.name, "Updated");
+    }
     #[test]
     fn stores_120_profiles_and_rejects_duplicate_ids() {
         let dir = tempfile::tempdir().unwrap();

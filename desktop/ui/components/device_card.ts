@@ -60,7 +60,7 @@ export class DeviceCardComponent {
     const friendly = parseFriendlyVersion(spec.image);
     const formFactor = this.detectFormFactor();
 
-    const state = this.status?.state ?? 'stopped';
+    const state = this.status?.state ?? 'unknown';
     const isRunning = state === 'ready';
     const isStarting = state === 'starting';
     const isQueued = state === 'queued';
@@ -87,6 +87,8 @@ export class DeviceCardComponent {
     } else if (isCrashed) {
       statusLabel = 'Error';
       statusDotClass = 'crashed';
+    } else if (state === 'unknown' || state === 'stopping') {
+      statusLabel = state === 'stopping' ? 'Stopping...' : 'Unknown';
     }
 
     // Primary Action Button
@@ -101,13 +103,13 @@ export class DeviceCardComponent {
       primaryBtnHtml = `
         <button class="btn-primary-action open" id="btn-primary-action" ${this.isBusy ? 'disabled' : ''}>
           ${Icons.external}
-          <span>Open</span>
+          <span>Window info</span>
         </button>
       `;
-    } else if (isStarting || isQueued) {
+    } else if (isStarting || isQueued || state === 'stopping') {
       primaryBtnHtml = `
         <button class="btn-primary-action start" id="btn-primary-action" disabled>
-          <span>${isStarting ? 'Starting...' : 'Queued'}</span>
+          <span>${isStarting ? 'Starting...' : isQueued ? 'Queued' : 'Stopping...'}</span>
         </button>
       `;
     } else if (isCrashed) {
@@ -122,6 +124,8 @@ export class DeviceCardComponent {
       <div class="card-device-preview">
         ${illustrationSvg}
       </div>
+
+      ${this.status?.diagnostic ? `<p class="form-helper-text">${this.escapeHtml(this.status.diagnostic)}</p>` : ''}
 
       <div class="device-header-row">
         <h3 class="device-card-title" title="${this.escapeHtml(spec.name)}">
@@ -148,12 +152,12 @@ export class DeviceCardComponent {
       <!-- Context Menu Dropdown -->
       <div class="context-menu-popover" id="device-context-menu" style="display: ${this.isMenuOpen ? 'flex' : 'none'};">
         ${isRunning ? `<button class="context-menu-item" id="ctx-restart">Restart</button>` : ''}
-        ${isRunning ? `<button class="context-menu-item" id="ctx-stop">Stop</button>` : ''}
+        ${isRunning || isStarting || isQueued ? `<button class="context-menu-item" id="ctx-stop">${isQueued ? 'Cancel queued start' : 'Stop'}</button>` : ''}
         <button class="context-menu-item" id="ctx-apk" ${!isRunning ? 'disabled style="opacity: 0.5;"' : ''}>Install APK...</button>
         <button class="context-menu-item" id="ctx-rename">Rename...</button>
-        <button class="context-menu-item" id="ctx-duplicate">Duplicate</button>
+        <button class="context-menu-item" id="ctx-duplicate">Copy settings only</button>
         <div style="height: 1px; background: var(--border-subtle); margin: 3px 0;"></div>
-        <button class="context-menu-item danger" id="ctx-delete" ${isRunning ? 'disabled style="opacity: 0.5;"' : ''}>Delete</button>
+        <button class="context-menu-item danger" id="ctx-delete" ${state !== 'stopped' && state !== 'crashed' ? 'disabled style="opacity: 0.5;"' : ''}>Delete</button>
       </div>
     `;
 
@@ -177,12 +181,12 @@ export class DeviceCardComponent {
     });
 
     // Close menu when clicking outside
-    document.addEventListener('click', () => {
+    this.element.onclick = () => {
       if (this.isMenuOpen) {
         this.isMenuOpen = false;
         menu.style.display = 'none';
       }
-    });
+    };
 
     this.element.querySelector('#ctx-stop')?.addEventListener('click', () => {
       this.callbacks.onStop(this.device);

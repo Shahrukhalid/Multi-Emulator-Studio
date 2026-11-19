@@ -20,6 +20,7 @@ export class SettingsComponent {
   private developerMode = false;
   private dataDir = '';
   private sdkDir = '';
+  private connected = false;
 
   constructor(
     host: HostInfo | null,
@@ -53,6 +54,13 @@ export class SettingsComponent {
 
   getElement(): HTMLElement {
     return this.element;
+  }
+
+  setConnection(dataDir: string, connected: boolean): void {
+    this.dataDir = dataDir;
+    this.connected = connected;
+    if (this.sdk) this.sdkDir = this.sdk.root;
+    this.render();
   }
 
   updateData(
@@ -107,9 +115,14 @@ export class SettingsComponent {
             </div>
           </div>
           <div style="display: flex; gap: 8px; align-items: center;">
-            <input class="form-text-input" id="setting-datadir-input" value="${this.escapeHtml(this.dataDir)}" style="min-width: 280px; font-size: 11px; font-family: var(--font-mono);" />
-            <button class="nav-item" id="btn-save-datadir" style="padding: 6px 12px; font-size: 12px; border: 1px solid var(--border-subtle);">Save</button>
+            <input class="form-text-input" id="setting-datadir-input" value="${this.escapeHtml(this.dataDir)}" readonly style="min-width: 280px; font-size: 11px; font-family: var(--font-mono);" />
           </div>
+        </div>
+
+        <div class="setting-row">
+          <label for="setting-sdk-input">Android SDK directory</label>
+          <input class="form-text-input" id="setting-sdk-input" value="${this.escapeHtml(this.sdkDir)}" placeholder="Path to installed official Android SDK" ${this.connected ? 'readonly' : ''} />
+          <button class="nav-item" id="btn-connect-sdk" ${this.connected ? 'disabled' : ''}>${this.connected ? 'Connected' : 'Connect SDK'}</button>
         </div>
       </div>
 
@@ -143,8 +156,8 @@ export class SettingsComponent {
             </div>
           </div>
           <div>
-            <span class="platform-badge active">
-              ${this.accelerationText.includes('accel: 0') || this.accelerationText.includes('usable') ? '✓ Hardware Accelerated' : 'Acceleration Detected'}
+            <span class="platform-badge ${this.accelerationText.split(/\r?\n/).some(line => line.trim() === '0') ? 'active' : 'notice'}">
+              ${this.accelerationText.split(/\r?\n/).some(line => line.trim() === '0') ? '✓ Hardware Accelerated' : 'Acceleration not verified'}
             </span>
           </div>
         </div>
@@ -219,11 +232,16 @@ export class SettingsComponent {
       this.callbacks.onThemeChange(val);
     });
 
-    // Save Data Dir
-    this.element.querySelector('#btn-save-datadir')?.addEventListener('click', async () => {
-      const input = this.element.querySelector('#setting-datadir-input') as HTMLInputElement;
-      if (input?.value.trim()) {
-        await this.callbacks.onDataDirChange(input.value.trim());
+    // Connect after initial SDK discovery fails. Do not migrate live storage.
+    this.element.querySelector('#btn-connect-sdk')?.addEventListener('click', async () => {
+      const input = this.element.querySelector('#setting-sdk-input') as HTMLInputElement;
+      const button = this.element.querySelector('#btn-connect-sdk') as HTMLButtonElement;
+      this.sdkDir = input.value.trim();
+      button.disabled = true;
+      try {
+        await this.callbacks.onDataDirChange(this.dataDir, this.sdkDir || null);
+      } finally {
+        button.disabled = this.connected;
       }
     });
 

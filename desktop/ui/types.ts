@@ -80,6 +80,7 @@ export type Request =
   | { action: 'network' }
   | { action: 'create'; spec: DeviceSpec }
   | { action: 'clone_profile'; id: string; name: string }
+  | { action: 'rename'; id: string; name: string }
   | { action: 'start'; id: string }
   | { action: 'stop'; id: string }
   | { action: 'restart'; id: string }

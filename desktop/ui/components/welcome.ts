@@ -45,7 +45,7 @@ export class WelcomeComponent {
             Create an Android phone, tablet, or foldable virtual device backed by official Android emulator tools.
           </div>
           <div class="platform-badge active">
-            <span>Ready · Real Emulator</span>
+            <span>Requires configured Android SDK</span>
           </div>
         </div>
 
@@ -56,11 +56,7 @@ export class WelcomeComponent {
           </div>
           <div class="platform-name">iPhone & iPad Simulator</div>
           <div class="platform-desc">
-            ${
-              isMac
-                ? 'Run iOS and iPadOS simulators directly via Apple Xcode toolchain.'
-                : 'Apple iOS Simulator requires macOS with Xcode installed. Currently running on Windows / non-macOS.'
-            }
+            iOS and iPadOS simulation is not implemented in this version.
           </div>
           <div class="platform-badge notice">
             <span>${isMac ? 'Requires Xcode' : 'macOS Only'}</span>

@@ -118,6 +118,9 @@ impl<E: Engine> Manager<E> {
         spec.name = name;
         self.create(spec)
     }
+    pub fn rename(&self, id: Uuid, name: String) -> Result<Device> {
+        self.store.rename(id, name)
+    }
     pub fn install_apk(&mut self, id: Uuid, path: &Path) -> Result<()> {
         self.engine.install_apk(&self.store.get(id)?, path)
     }
@@ -273,6 +276,26 @@ mod tests {
         assert!(Manager::open(dir.path(), Fake::default()).is_err());
         drop(m);
         assert!(Manager::open(dir.path(), Fake::default()).is_ok());
+    }
+    #[test]
+    fn rename_preserves_device_identity_and_running_instance() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut m = Manager::open(dir.path(), Fake::default()).unwrap();
+        let original = m.create(crate::model::sample()).unwrap();
+        let before = m.start(original.id).unwrap();
+        let renamed = m.rename(original.id, "New name".into()).unwrap();
+        assert_eq!(renamed.id, original.id);
+        assert_eq!(renamed.avd_name(), original.avd_name());
+        let mut expected = original.spec;
+        expected.name = "New name".into();
+        assert_eq!(renamed.spec, expected);
+        assert_eq!(m.list().unwrap(), vec![renamed]);
+        assert_eq!(
+            m.status(original.id).unwrap().console_port,
+            before.console_port
+        );
+        assert!(m.rename(original.id, " ".into()).is_err());
+        assert_eq!(m.list().unwrap()[0].spec.name, "New name");
     }
     #[test]
     fn failed_status_and_queued_start_do_not_block_other_devices() {

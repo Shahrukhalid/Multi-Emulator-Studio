@@ -23,6 +23,7 @@ pub enum Request {
     Network,
     Create { spec: DeviceSpec },
     CloneProfile { id: Uuid, name: String },
+    Rename { id: Uuid, name: String },
     Start { id: Uuid },
     Stop { id: Uuid },
     Restart { id: Uuid },
@@ -72,6 +73,7 @@ impl Controller {
             }
             Request::Create { spec } => json!(self.manager.create(spec)?),
             Request::CloneProfile { id, name } => json!(self.manager.clone_profile(id, name)?),
+            Request::Rename { id, name } => json!(self.manager.rename(id, name)?),
             Request::Start { id } => json!(self.manager.start(id)?),
             Request::Stop { id } => {
                 self.manager.stop(id)?;

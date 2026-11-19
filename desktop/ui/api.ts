@@ -35,6 +35,7 @@ export interface IApiClient {
   getNetworkReport(): Promise<NetworkReport>;
   createDevice(spec: DeviceSpec): Promise<Device>;
   cloneDevice(id: string, name: string): Promise<Device>;
+  renameDevice(id: string, name: string): Promise<Device>;
   startDevice(id: string): Promise<Status>;
   stopDevice(id: string): Promise<boolean>;
   restartDevice(id: string): Promise<Status>;
@@ -105,6 +106,9 @@ class TauriApiClient implements IApiClient {
 
   cloneDevice(id: string, name: string): Promise<Device> {
     return this.dispatch<Device>({ action: 'clone_profile', id, name });
+  }
+  renameDevice(id: string, name: string): Promise<Device> {
+    return this.dispatch<Device>({ action: 'rename', id, name });
   }
 
   startDevice(id: string): Promise<Status> {
@@ -181,7 +185,7 @@ class BrowserPreviewClient implements IApiClient {
   }
 
   async connect(_root: string, _sdkRoot?: string | null): Promise<void> {
-    // No-op in browser preview
+    throw new Error('Connecting an SDK requires the native desktop app.');
   }
 
   async dispatch<T>(request: Request): Promise<T> {
@@ -287,6 +291,9 @@ class BrowserPreviewClient implements IApiClient {
     const orig = this.mockDevices.find((d) => d.id === id);
     if (!orig) throw new Error('Device not found');
     return this.createDevice({ ...orig.spec, name });
+  }
+  async renameDevice(_id: string, _name: string): Promise<Device> {
+    throw new Error('Renaming requires the desktop app.');
   }
 
   async startDevice(_id: string): Promise<Status> {
