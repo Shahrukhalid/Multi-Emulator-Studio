@@ -58,6 +58,7 @@ mod tests {
                 "10.0.2.15/16".into(),
                 "127.0.0.1/8".into(),
             ],
+            diagnostic: None,
         };
         let matches = overlaps(&[status(a, 5554), status(b, 5556)]);
         assert_eq!(matches.len(), 1);

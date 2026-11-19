@@ -5,7 +5,7 @@ use crate::{
     Result,
 };
 use std::{
-    collections::VecDeque,
+    collections::{HashMap, VecDeque},
     fs::{File, OpenOptions},
     path::Path,
 };
@@ -16,6 +16,7 @@ pub struct Manager<E: Engine> {
     engine: E,
     _lock: File,
     queue: VecDeque<Uuid>,
+    failed_starts: HashMap<Uuid, String>,
 }
 impl<E: Engine> Manager<E> {
     pub fn open(root: &Path, engine: E) -> Result<Self> {
@@ -33,6 +34,7 @@ impl<E: Engine> Manager<E> {
             engine,
             _lock: lock,
             queue: VecDeque::new(),
+            failed_starts: HashMap::new(),
         })
     }
     pub fn list(&self) -> Result<Vec<Device>> {
@@ -51,6 +53,7 @@ impl<E: Engine> Manager<E> {
         Ok(d)
     }
     pub fn start(&mut self, id: Uuid) -> Result<Status> {
+        self.failed_starts.remove(&id);
         let status = self.engine.start(&self.store.get(id)?)?;
         if status.state == DeviceState::Queued {
             if !self.queue.contains(&id) {
@@ -62,6 +65,7 @@ impl<E: Engine> Manager<E> {
         Ok(status)
     }
     pub fn stop(&mut self, id: Uuid) -> Result<()> {
+        self.failed_starts.remove(&id);
         self.queue.retain(|x| *x != id);
         self.engine.stop(&self.store.get(id)?)
     }
@@ -70,6 +74,16 @@ impl<E: Engine> Manager<E> {
         self.start(id)
     }
     pub fn status(&mut self, id: Uuid) -> Result<Status> {
+        if let Some(message) = self.failed_starts.get(&id) {
+            return Ok(Status {
+                id,
+                state: DeviceState::Unknown,
+                pid: None,
+                console_port: None,
+                addresses: vec![],
+                diagnostic: Some(message.clone()),
+            });
+        }
         if self.queue.contains(&id) {
             return Ok(Status {
                 id,
@@ -77,11 +91,13 @@ impl<E: Engine> Manager<E> {
                 pid: None,
                 console_port: None,
                 addresses: vec![],
+                diagnostic: None,
             });
         }
         self.engine.status(&self.store.get(id)?)
     }
     pub fn delete(&mut self, id: Uuid) -> Result<()> {
+        self.failed_starts.remove(&id);
         self.queue.retain(|x| *x != id);
         self.engine.delete(&self.store.get(id)?)?;
         self.store.remove(id)
@@ -102,7 +118,14 @@ impl<E: Engine> Manager<E> {
     pub fn tick(&mut self) -> Result<Vec<Status>> {
         let mut statuses = self.snapshot()?;
         while let Some(id) = self.queue.front().copied() {
-            let s = self.start(id)?;
+            let s = match self.start(id) {
+                Ok(s) => s,
+                Err(err) => {
+                    self.queue.retain(|queued| *queued != id);
+                    self.failed_starts.insert(id, err.to_string());
+                    Self::unavailable_status(id, err)
+                }
+            };
             let queued = s.state == DeviceState::Queued;
             statuses.retain(|old| old.id != id);
             statuses.push(s);
@@ -115,9 +138,22 @@ impl<E: Engine> Manager<E> {
     pub fn snapshot(&mut self) -> Result<Vec<Status>> {
         let mut statuses = Vec::new();
         for d in self.store.list()? {
-            statuses.push(self.status(d.id)?);
+            statuses.push(match self.status(d.id) {
+                Ok(s) => s,
+                Err(err) => Self::unavailable_status(d.id, err),
+            });
         }
         Ok(statuses)
+    }
+    fn unavailable_status(id: Uuid, err: crate::Error) -> Status {
+        Status {
+            id,
+            state: DeviceState::Unknown,
+            pid: None,
+            console_port: None,
+            addresses: vec![],
+            diagnostic: Some(err.to_string()),
+        }
     }
 }
 
@@ -131,6 +167,8 @@ mod tests {
         created: HashSet<Uuid>,
         active: HashMap<Uuid, u16>,
         next: u16,
+        fail_start: HashSet<Uuid>,
+        fail_status: HashSet<Uuid>,
     }
     impl Engine for Fake {
         fn create(&mut self, d: &Device) -> Result<()> {
@@ -138,6 +176,9 @@ mod tests {
             Ok(())
         }
         fn start(&mut self, d: &Device) -> Result<Status> {
+            if self.fail_start.contains(&d.id) {
+                return Err(Error::Runtime("mock start failed".into()));
+            }
             if self.active.contains_key(&d.id) {
                 return Err(Error::Conflict("already active".into()));
             }
@@ -148,6 +189,7 @@ mod tests {
                     pid: None,
                     console_port: None,
                     addresses: vec![],
+                    diagnostic: None,
                 });
             }
             self.next += 2;
@@ -159,6 +201,9 @@ mod tests {
             Ok(())
         }
         fn status(&mut self, d: &Device) -> Result<Status> {
+            if self.fail_status.contains(&d.id) {
+                return Err(Error::Timeout("mock status failed".into()));
+            }
             let port = self.active.get(&d.id).copied();
             Ok(Status {
                 id: d.id,
@@ -170,6 +215,7 @@ mod tests {
                 pid: port.map(u32::from),
                 console_port: port,
                 addresses: vec![],
+                diagnostic: None,
             })
         }
         fn delete(&mut self, d: &Device) -> Result<()> {
@@ -217,5 +263,33 @@ mod tests {
         assert!(Manager::open(dir.path(), Fake::default()).is_err());
         drop(m);
         assert!(Manager::open(dir.path(), Fake::default()).is_ok());
+    }
+    #[test]
+    fn failed_status_and_queued_start_do_not_block_other_devices() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut m = Manager::open(dir.path(), Fake::default()).unwrap();
+        let a = m.create(crate::model::sample()).unwrap();
+        let b = m.create(crate::model::sample()).unwrap();
+        let c = m.create(crate::model::sample()).unwrap();
+        let d = m.create(crate::model::sample()).unwrap();
+        m.start(a.id).unwrap();
+        m.start(b.id).unwrap();
+        assert_eq!(m.start(c.id).unwrap().state, DeviceState::Queued);
+        assert_eq!(m.start(d.id).unwrap().state, DeviceState::Queued);
+        m.engine.fail_start.insert(c.id);
+        m.engine.fail_status.insert(b.id);
+        m.stop(a.id).unwrap();
+        let statuses = m.tick().unwrap();
+        assert!(statuses
+            .iter()
+            .any(|s| s.id == b.id && s.diagnostic.is_some()));
+        assert!(statuses
+            .iter()
+            .any(|s| s.id == c.id && s.diagnostic.is_some()));
+        assert!(statuses
+            .iter()
+            .any(|s| s.id == d.id && s.state == DeviceState::Ready));
+        assert!(m.status(c.id).unwrap().diagnostic.is_some());
+        assert!(!m.queue.contains(&c.id));
     }
 }

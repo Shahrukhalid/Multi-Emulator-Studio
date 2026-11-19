@@ -3,7 +3,7 @@ const invoke=window.__TAURI__.core.invoke;
 export {};
 type Request={action:string;[key:string]:unknown};
 type Device={id:string;spec:{name:string;image:string}};
-type Status={id:string;state:string;pid:number|null;console_port:number|null;addresses:string[]};
+type Status={id:string;state:string;pid:number|null;console_port:number|null;addresses:string[];diagnostic?:string};
 const el=<T extends HTMLElement>(id:string)=>document.getElementById(id)! as T;
 const val=(id:string)=>el<HTMLInputElement>(id).value;
 const num=(id:string)=>Number(val(id));
@@ -15,6 +15,7 @@ async function action(fn:()=>Promise<unknown>){
 }
 const bind=(id:string,fn:()=>Promise<unknown>)=>el(id).addEventListener('click',()=>void action(fn));
 async function images(){const xs=await dispatch<string[]>({action:'images'});const s=el<HTMLSelectElement>('image');s.replaceChildren();for(const x of xs){const o=document.createElement('option');o.textContent=x;o.value=x;s.append(o);}return xs;}
+async function hardwareProfiles(){const xs=await dispatch<string[]>({action:'hardware_profiles'});const s=el<HTMLSelectElement>('hardware');s.replaceChildren();for(const x of xs){const o=document.createElement('option');o.textContent=x;o.value=x;s.append(o);}if(xs.includes('pixel_6'))s.value='pixel_6';return xs;}
 async function list(){
   const ds=await dispatch<Device[]>({action:'list'}), box=el('devices');
   box.replaceChildren();
@@ -35,11 +36,11 @@ async function list(){
   }return ds;
 }
 let connected=false;
-bind('connect',async()=>{await invoke('connect',{root:val('root'),sdkRoot:val('sdk')||null});connected=true;await images();return list();});
+bind('connect',async()=>{await invoke('connect',{root:val('root'),sdkRoot:val('sdk')||null});connected=true;await images();await hardwareProfiles();return list();});
 bind('images',images);bind('host',()=>dispatch({action:'host'}));bind('list',list);
 bind('network',()=>dispatch({action:'network'}));
-// Health and admission ticks are serialized in the Rust controller.
+// Backend supervisor advances admission even if the webview is inactive.
 let polling=false;
-setInterval(async()=>{if(!connected||polling)return;polling=true;try{const statuses=await dispatch<Status[]>({action:'tick'});for(const s of statuses){const row=document.getElementById('state-'+s.id);if(row)row.textContent=s.state+(s.console_port===null?'':' · console '+s.console_port);}}catch{}finally{polling=false;}},5000);
+setInterval(async()=>{if(!connected||polling)return;polling=true;try{const statuses=await invoke<Status[]>('health');for(const s of statuses){const row=document.getElementById('state-'+s.id);if(row){row.textContent=s.state+(s.console_port===null?'':' · console '+s.console_port)+(s.diagnostic?' · '+s.diagnostic:'');}}}catch(e){out.textContent=JSON.stringify(e,null,2);}finally{polling=false;}},5000);
 bind('create',async()=>{const d=await dispatch({action:'create',spec:{name:val('name'),image:val('image'),hardware_profile:val('hardware'),ram_mb:num('ram'),cores:num('cores'),width:num('width'),height:num('height'),disk_mb:num('disk'),locale:val('locale')}});await list();return d;});
 invoke<string>('default_data_dir').then(p=>{el<HTMLInputElement>('root').value=p;}).catch(e=>{out.textContent=String(e);});

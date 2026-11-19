@@ -151,6 +151,43 @@ impl Sdk {
             SHORT,
         )
     }
+    pub fn hardware_profiles(&self) -> Result<Vec<String>> {
+        let text = run(
+            Command::new(&self.avdmanager)
+                .env("ANDROID_HOME", &self.root)
+                .env("ANDROID_SDK_ROOT", &self.root)
+                .args(["list", "device", "-c"]),
+            None,
+            SHORT,
+        )?;
+        Ok(parse_hardware_profiles(&text))
+    }
+}
+
+fn parse_hardware_profiles(text: &str) -> Vec<String> {
+    let mut profiles: Vec<_> = text
+        .lines()
+        .map(str::trim)
+        .filter(|s| {
+            !s.is_empty()
+                && s.len() <= 128
+                && s.bytes()
+                    .all(|c| c.is_ascii_alphanumeric() || b"_-.".contains(&c))
+        })
+        .map(str::to_owned)
+        .collect();
+    profiles.sort();
+    profiles.dedup();
+    profiles
+}
+
+#[cfg(test)]
+#[test]
+fn hardware_catalog_filters_unsupported_identifiers() {
+    assert_eq!(
+        parse_hardware_profiles("pixel_6\nNexus 5\nmedium_phone\npixel_6\n"),
+        ["medium_phone", "pixel_6"]
+    );
 }
 
 struct Instance {
@@ -355,6 +392,7 @@ impl Engine for Android {
                 pid: None,
                 console_port: None,
                 addresses: vec![],
+                diagnostic: None,
             });
         }
         self.check_disk(1024)?;
@@ -405,6 +443,7 @@ impl Engine for Android {
             pid: self.active.get(&d.id).map(|i| i.child.id()),
             console_port: Some(port),
             addresses: vec![],
+            diagnostic: None,
         })
     }
     fn status(&mut self, d: &Device) -> Result<Status> {
@@ -424,6 +463,7 @@ impl Engine for Android {
                 pid: None,
                 console_port: None,
                 addresses: vec![],
+                diagnostic: None,
             });
         };
         if instance.child.try_wait()?.is_some() {
@@ -435,6 +475,7 @@ impl Engine for Android {
                 pid: None,
                 console_port: None,
                 addresses: vec![],
+                diagnostic: None,
             });
         }
         let port = instance.port;
@@ -490,6 +531,7 @@ impl Engine for Android {
             pid: Some(pid),
             console_port: Some(port),
             addresses,
+            diagnostic: None,
         })
     }
     fn stop(&mut self, d: &Device) -> Result<()> {

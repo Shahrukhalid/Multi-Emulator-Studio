@@ -8,9 +8,15 @@
 |---|---|---|---|
 | M0 | [#1](https://github.com/Shahrukhalid/Multi-Emulator-Studio/pull/1) | 2706b6194f2b175b350746186b318e57bc727cbb | Rust core, SQLite schema, errors, host probe, Engine contract, CI |
 | M1 | [#2](https://github.com/Shahrukhalid/Multi-Emulator-Studio/pull/2) | eeb5e882fc33a0880ebd5ce67876f5df04490e09 | Official SDK, lifecycle, controller, Tauri 2/TypeScript panel, resource queue, desktop checks |
-| M2 | milestone/m2-verification | See branch head | Port identity diagnostics, crash state, network overlap report, tests, real-host smoke test, handoff |
+| M2 | [#3](https://github.com/Shahrukhalid/Multi-Emulator-Studio/pull/3) | See branch head | Port identity diagnostics, crash state, network overlap report, tests, real-host smoke test, handoff |
 
 PRs are stacked. Merge in order only after required checks pass. Do not publish a commercial release.
+
+## Follow-up hardening
+
+Moved desktop queue/health supervision into a native backend worker; the webview reads cached statuses. Failed queued starts are removed from automatic retries and retain a per-device diagnostic until explicit retry/stop. Failed status queries do not block other profiles. Official avdmanager hardware profile discovery is exposed as a constrained dropdown. The installed SDK returned real profile IDs, including pixel_6.
+
+Local equivalent changes passed seven Rust unit tests, core and desktop Clippy, desktop cargo check and TypeScript build. The local execution environment disconnected before export; this commit reconstructs those changes from the tested diffs. Remote byte-for-byte verification, CI and real boot remain pending.
 
 ## Actual verification
 
@@ -41,12 +47,13 @@ Windows compile, packaging and runtime: **not verified**. GitHub Actions M0 run 
 
 Local CLI: cargo run --locked -- DATA_DIRECTORY [SDK_DIRECTORY]. One JSON request per line; reply is {"ok": ...} or {"error":{"code":"...","message":"..."}}.
 
-Tauri commands: default_data_dir(), connect({root,sdkRoot}), dispatch({request}). Connect establishes one local controller and persists SDK root. Typed SDK operations execute off the UI thread. Request shapes match Rust control::Request.
+Tauri commands: default_data_dir(), connect({root,sdkRoot}), dispatch({request}), health(). Connect establishes one local controller and persists SDK root. Typed SDK operations execute off the UI thread. Request shapes match Rust control::Request.
 
 | action | fields | result |
 |---|---|---|
 | host | none | OS, arch, CPU, RAM, disk availability, support |
 | sdk / images / acceleration | none | official tools, installed images, acceleration |
+| hardware_profiles | none | discovered supported hardware IDs |
 | list | none | persisted Device records |
 | create | spec | new Device with generated UUID |
 | clone_profile | id, name | fresh AVD with copied settings, not app data |
@@ -57,14 +64,14 @@ Tauri commands: default_data_dir(), connect({root,sdkRoot}), dispatch({request})
 | tick | none | health statuses and queued starts |
 | network | none | observed interface statuses and duplicate address report |
 
-DeviceSpec: name, image, hardware_profile, ram_mb, cores, width, height, disk_mb, locale. Input validated. AVD names derive from generated UUIDs. Status: id, state, pid, console_port, addresses. States: queued, stopped, starting, ready, stopping, crashed, unknown. Errors: invalid, unavailable, conflict, timeout, runtime, io, storage, json; desktop also internal.
+DeviceSpec: name, image, hardware_profile, ram_mb, cores, width, height, disk_mb, locale. Input validated. AVD names derive from generated UUIDs. Status: id, state, pid, console_port, addresses, optional diagnostic. States: queued, stopped, starting, ready, stopping, crashed, unknown. Errors: invalid, unavailable, conflict, timeout, runtime, io, storage, json; desktop also internal.
 
 ## Remaining verification and limitations
 
 - Complete opt-in smoke test on a normal compatible host with loopback permission, ample disk, and accepted SDK license. It attempts concurrent start, distinct PID/ports, isolated guest settings, restart persistence and cleanup. Extend with disposable APK to prove independent installed apps and app data.
 - Locale is validated/stored but not applied to guest OS; implement via officially supported mechanism. Clone is configuration-only, not disk/app-data cloning.
-- SDK guidance points to official tools and interactive license acceptance; no automatic installer or live uninstalled image catalog. Hardware-profile selection is currently typed, not discovered. No license acceptance automation.
-- Conservative total RAM/CPU budget plus measured free disk reserve, not live per-instance forecasting. Queue is in memory and ticked by development UI; CLI requires explicit tick. Improve background supervision, per-instance timeout isolation and durable lifecycle state.
+- SDK guidance points to official tools and interactive license acceptance; no automatic installer or live uninstalled image catalog. Hardware-profile selection uses official avdmanager IDs restricted to the currently supported safe identifier format. No license acceptance automation.
+- Conservative total RAM/CPU budget plus measured free disk reserve, not live per-instance forecasting. Queue is in memory and ticked by a native desktop worker; CLI requires explicit tick. Individual failures are isolated in diagnostics. Durable lifecycle state and fully independent per-device probe scheduling remain pending.
 - Unknown/stale AVD locks fail closed. No automatic adoption or stale lock removal after abrupt crash. Normal shutdown attempts official emulator stop.
 - Port scan is advisory: external process can claim a port before launch. SDK owns exclusive socket binding. ADB commands verify managed AVD name before targeting. Cross-process races unverified.
 - Guest network observations require boot; duplicate private addresses may be normal on separate NAT networks. Public IP uniqueness and MAC customization not promised; no network observations from this run.

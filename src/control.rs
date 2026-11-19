@@ -16,6 +16,7 @@ pub enum Request {
     Host,
     Sdk,
     Images,
+    HardwareProfiles,
     Acceleration,
     List,
     Tick,
@@ -61,6 +62,7 @@ impl Controller {
             }
             Request::Sdk => json!(self.sdk),
             Request::Images => json!(self.sdk.images()?),
+            Request::HardwareProfiles => json!(self.sdk.hardware_profiles()?),
             Request::Acceleration => json!(self.sdk.acceleration()?),
             Request::List => json!(self.manager.list()?),
             Request::Tick => json!(self.manager.tick()?),

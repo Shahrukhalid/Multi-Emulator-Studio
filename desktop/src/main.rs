@@ -5,10 +5,25 @@ use multi_emulator_core::{
 use std::{
     path::PathBuf,
     sync::{Arc, Mutex},
+    thread,
+    time::Duration,
 };
 use tauri::{Manager, State};
 
 type Shared = Arc<Mutex<Option<Controller>>>;
+type HealthCache = Arc<Mutex<Option<Result<serde_json::Value, ApiError>>>>;
+
+#[tauri::command]
+fn health(cache: State<'_, HealthCache>) -> Result<serde_json::Value, ApiError> {
+    cache
+        .lock()
+        .map_err(|_| ApiError {
+            code: "internal",
+            message: "health cache lock poisoned".into(),
+        })?
+        .clone()
+        .unwrap_or_else(|| Ok(serde_json::json!([])))
+}
 
 #[tauri::command]
 async fn connect(
@@ -69,9 +84,38 @@ fn default_data_dir(app: tauri::AppHandle) -> Result<PathBuf, String> {
 fn main() {
     tauri::Builder::default()
         .manage(Arc::new(Mutex::new(None::<Controller>)))
+        .manage(Arc::new(Mutex::new(
+            None::<Result<serde_json::Value, ApiError>>,
+        )))
+        .setup(|app| {
+            let controller = Arc::downgrade(app.state::<Shared>().inner());
+            let cache = Arc::downgrade(app.state::<HealthCache>().inner());
+            thread::Builder::new()
+                .name("emulator-supervisor".into())
+                .spawn(move || loop {
+                    {
+                        let (Some(controller), Some(cache)) =
+                            (controller.upgrade(), cache.upgrade())
+                        else {
+                            break;
+                        };
+                        if let Ok(mut guard) = controller.try_lock() {
+                            if let Some(c) = guard.as_mut() {
+                                let result = c.execute(Request::Tick);
+                                if let Ok(mut health) = cache.lock() {
+                                    *health = Some(result);
+                                }
+                            }
+                        };
+                    }
+                    thread::sleep(Duration::from_secs(5));
+                })?;
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             connect,
             dispatch,
+            health,
             default_data_dir
         ])
         .run(tauri::generate_context!())

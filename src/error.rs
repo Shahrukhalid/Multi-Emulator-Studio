@@ -21,7 +21,7 @@ pub enum Error {
 }
 pub type Result<T> = std::result::Result<T, Error>;
 
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 pub struct ApiError {
     pub code: &'static str,
     pub message: String,
