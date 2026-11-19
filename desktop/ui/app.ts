@@ -102,8 +102,12 @@ export class App {
           }
         },
         onCheckSdk: async () => {
+          if (!this.isConnected && !this.api.isPreview) {
+            toast.show('Connect your Android SDK before checking installed tools.', 'warning');
+            return;
+          }
           await this.refreshSdkCatalog();
-          toast.show('Toolchain check completed', 'info');
+          toast.show(this.sdk && this.images.length && this.hardwareProfiles.length ? 'SDK and compatible images detected' : 'SDK or compatible images still missing', this.sdk && this.images.length && this.hardwareProfiles.length ? 'success' : 'warning');
         },
         onFetchLogs: async () => {
           if (this.devices.length > 0) {

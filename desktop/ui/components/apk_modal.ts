@@ -54,7 +54,7 @@ export class ApkModalComponent {
 
           <div id="apk-drag-box" style="border: 2px dashed var(--border-strong); border-radius: var(--radius-md); padding: 24px; text-align: center; cursor: pointer; transition: background 0.15s;">
             <div style="font-size: 13px; font-weight: 500;">Drag and drop an APK file here</div>
-            <div style="font-size: 11px; color: var(--text-tertiary); margin-top: 4px;">File path will be populated automatically</div>
+            <div style="font-size: 11px; color: var(--text-tertiary); margin-top: 4px;">If the desktop provides an absolute path, it will be filled in. Otherwise enter it above.</div>
           </div>
         </div>
 
@@ -88,20 +88,27 @@ export class ApkModalComponent {
       dropzone.style.background = 'transparent';
       if (e.dataTransfer?.files.length) {
         const file = e.dataTransfer.files[0];
-        // @ts-ignore
-        input.value = file.path || file.name;
+        const path = (file as File & { path?: string }).path;
+        if (path && isAbsoluteApkPath(path)) {
+          input.value = path;
+          errBox.style.display = 'none';
+        } else {
+          errBox.textContent = 'The webview did not provide a full file path. Enter the absolute APK path above.';
+          errBox.style.display = 'block';
+        }
       }
     });
 
     submitBtn.addEventListener('click', async () => {
+      if (this.isInstalling) return;
       const path = input.value.trim();
       if (!path) {
         errBox.textContent = 'Please enter an APK file path.';
         errBox.style.display = 'block';
         return;
       }
-      if (!path.toLowerCase().endsWith('.apk')) {
-        errBox.textContent = 'Selected file must have a .apk extension.';
+      if (!isAbsoluteApkPath(path)) {
+        errBox.textContent = 'Enter an absolute local path ending in .apk.';
         errBox.style.display = 'block';
         return;
       }
@@ -129,4 +136,8 @@ export class ApkModalComponent {
     div.textContent = text;
     return div.innerHTML;
   }
+}
+
+function isAbsoluteApkPath(path: string): boolean {
+  return (path.startsWith('/') || /^[A-Za-z]:[\\/]/.test(path)) && path.toLowerCase().endsWith('.apk');
 }

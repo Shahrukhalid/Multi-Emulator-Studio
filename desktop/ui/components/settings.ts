@@ -181,9 +181,10 @@ export class SettingsComponent {
             In accordance with Google terms of service, Android emulator images and development binaries cannot be redistributed without explicit license acceptance.
           </p>
           <p style="color: var(--text-secondary);">
-            To accept licenses, open your local terminal and run:
+            Install the official Android SDK command-line tools and a supported Java runtime first. Open Android Studio's SDK Manager, install Android Emulator, Android SDK Platform-Tools, and an Android system image matching your computer's CPU (ARM64 on Apple Silicon or x86_64 on supported Intel/AMD PCs). Review the license terms personally. If using command-line tools, review the licenses with:
           </p>
           <pre style="background: var(--bg-app); padding: 8px 12px; border-radius: 4px; border: 1px solid var(--border-subtle); font-family: var(--font-mono); margin-top: 6px; font-size: 11px;">sdkmanager --licenses</pre>
+          <p style="color: var(--text-secondary);">After installation, enter your SDK directory above and select Connect SDK. If already connected, select Check Toolchain to refresh the installed images. The app does not install tools or accept licenses on your behalf yet.</p>
         </div>
       </div>
 
