@@ -5,6 +5,7 @@ pub mod error;
 pub mod host;
 pub mod manager;
 pub mod model;
+pub mod network;
 pub mod runtime;
 pub mod storage;
 

@@ -5,7 +5,7 @@ use crate::{
 };
 use serde::Serialize;
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     fs,
     io::{Read, Seek, SeekFrom, Write},
     net::TcpListener,
@@ -165,6 +165,7 @@ pub struct Android {
     sdk: Sdk,
     home: PathBuf,
     active: HashMap<Uuid, Instance>,
+    crashed: HashSet<Uuid>,
 }
 impl Android {
     pub fn new(sdk: Sdk, home: PathBuf) -> Result<Self> {
@@ -174,6 +175,7 @@ impl Android {
             sdk,
             home: home.canonicalize()?,
             active: HashMap::new(),
+            crashed: HashSet::new(),
         })
     }
     pub fn sdk(&self) -> &Sdk {
@@ -202,11 +204,26 @@ impl Android {
             if self.active.values().any(|i| i.port == port) {
                 continue;
             }
-            if let (Ok(_console), Ok(_adb)) = (
-                TcpListener::bind(("127.0.0.1", port)),
-                TcpListener::bind(("127.0.0.1", port + 1)),
-            ) {
-                return Ok(port);
+            let console = match TcpListener::bind(("127.0.0.1", port)) {
+                Ok(x) => x,
+                Err(e) if e.kind() == std::io::ErrorKind::AddrInUse => continue,
+                Err(e) => {
+                    return Err(Error::Unavailable(format!(
+                        "cannot reserve emulator console port: {e}"
+                    )))
+                }
+            };
+            match TcpListener::bind(("127.0.0.1", port + 1)) {
+                Ok(_adb) => {
+                    drop(console);
+                    return Ok(port);
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::AddrInUse => continue,
+                Err(e) => {
+                    return Err(Error::Unavailable(format!(
+                        "cannot reserve emulator ADB port: {e}"
+                    )))
+                }
             }
         }
         Err(Error::Conflict("no available emulator port pair".into()))
@@ -220,14 +237,15 @@ impl Android {
         self.active.remove(&d.id);
         // Never remove unknown/stale emulator locks automatically.
         let dir = self.avd_dir(d);
-        if dir.exists()
-            && fs::read_dir(dir)?
-                .filter_map(|e| e.ok())
-                .any(|e| e.file_name().to_string_lossy().ends_with(".lock"))
-        {
-            return Err(Error::Conflict(
-                "AVD lock exists; stop the external process or recover using official tools".into(),
-            ));
+        if dir.exists() {
+            if !dir.canonicalize()?.starts_with(&self.home) {
+                return Err(Error::Conflict("AVD outside managed directory".into()));
+            }
+            for entry in fs::read_dir(&dir)? {
+                if entry?.file_name().to_string_lossy().ends_with(".lock") {
+                    return Err(Error::Conflict("AVD lock exists; stop the external process or recover using official tools".into()));
+                }
+            }
         }
         Ok(())
     }
@@ -322,6 +340,7 @@ impl Engine for Android {
             .collect();
         for id in dead {
             self.active.remove(&id);
+            self.crashed.insert(id);
         }
         let budget = crate::budget::Budget::from_host(&crate::host::detect())?;
         if !budget.fits(std::iter::empty(), &d.spec) {
@@ -379,6 +398,7 @@ impl Engine for Android {
                 spec: d.spec.clone(),
             },
         );
+        self.crashed.remove(&d.id);
         Ok(Status {
             id: d.id,
             state: DeviceState::Starting,
@@ -390,7 +410,11 @@ impl Engine for Android {
     fn status(&mut self, d: &Device) -> Result<Status> {
         let Some(instance) = self.active.get_mut(&d.id) else {
             let state = if self.assert_idle(d).is_ok() {
-                DeviceState::Stopped
+                if self.crashed.contains(&d.id) {
+                    DeviceState::Crashed
+                } else {
+                    DeviceState::Stopped
+                }
             } else {
                 DeviceState::Unknown
             };
@@ -404,6 +428,7 @@ impl Engine for Android {
         };
         if instance.child.try_wait()?.is_some() {
             self.active.remove(&d.id);
+            self.crashed.insert(d.id);
             return Ok(Status {
                 id: d.id,
                 state: DeviceState::Crashed,
@@ -427,6 +452,7 @@ impl Engine for Android {
             .unwrap_or(false);
         if !ready && should_timeout {
             self.stop(d)?;
+            self.crashed.insert(d.id);
             return Err(Error::Timeout("emulator boot".into()));
         }
         let state = if ready {
@@ -500,6 +526,7 @@ impl Engine for Android {
             None,
             SHORT,
         )?;
+        self.crashed.remove(&d.id);
         Ok(())
     }
     fn install_apk(&mut self, d: &Device, path: &Path) -> Result<()> {
@@ -526,9 +553,21 @@ impl Engine for Android {
 }
 impl Drop for Android {
     fn drop(&mut self) {
-        for instance in self.active.values_mut() {
-            let _ = instance.child.kill();
-            let _ = instance.child.wait();
+        let devices: Vec<_> = self
+            .active
+            .iter()
+            .map(|(id, i)| Device {
+                id: *id,
+                spec: i.spec.clone(),
+            })
+            .collect();
+        for d in devices {
+            if self.stop(&d).is_err() {
+                if let Some(mut i) = self.active.remove(&d.id) {
+                    let _ = i.child.kill();
+                    let _ = i.child.wait();
+                }
+            }
         }
     }
 }

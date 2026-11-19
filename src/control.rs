@@ -19,6 +19,7 @@ pub enum Request {
     Acceleration,
     List,
     Tick,
+    Network,
     Create { spec: DeviceSpec },
     CloneProfile { id: Uuid, name: String },
     Start { id: Uuid },
@@ -32,24 +33,41 @@ pub enum Request {
 pub struct Controller {
     sdk: Sdk,
     manager: Manager<Android>,
+    root: PathBuf,
 }
 impl Controller {
     pub fn open(root: &Path, sdk_root: Option<PathBuf>) -> Result<Self> {
-        let sdk = Sdk::detect(sdk_root)?;
+        std::fs::create_dir_all(root)?;
+        let previous =
+            crate::storage::Store::open(&root.join("metadata.db"))?.config("sdk_root")?;
+        let sdk = Sdk::detect(sdk_root.or_else(|| previous.map(PathBuf::from)))?;
         let manager = Manager::open(root, Android::new(sdk.clone(), root.join("avds"))?)?;
-        Ok(Self { sdk, manager })
+        manager.set_config("sdk_root", &sdk.root.to_string_lossy())?;
+        Ok(Self {
+            sdk,
+            manager,
+            root: root.to_path_buf(),
+        })
     }
     pub fn execute(&mut self, r: Request) -> std::result::Result<Value, ApiError> {
         self.dispatch(r).map_err(ApiError::from)
     }
     fn dispatch(&mut self, r: Request) -> Result<Value> {
         Ok(match r {
-            Request::Host => json!(crate::host::detect()),
+            Request::Host => {
+                let mut host = json!(crate::host::detect());
+                host["available_disk_mb"] = json!(crate::host::disk_free_mb(&self.root));
+                host
+            }
             Request::Sdk => json!(self.sdk),
             Request::Images => json!(self.sdk.images()?),
             Request::Acceleration => json!(self.sdk.acceleration()?),
             Request::List => json!(self.manager.list()?),
             Request::Tick => json!(self.manager.tick()?),
+            Request::Network => {
+                let statuses = self.manager.snapshot()?;
+                json!({"overlaps":crate::network::overlaps(&statuses),"devices":statuses,"note":"Duplicate guest IPs can be expected in isolated NAT networks; public IP and MAC customization are not asserted."})
+            }
             Request::Create { spec } => json!(self.manager.create(spec)?),
             Request::CloneProfile { id, name } => json!(self.manager.clone_profile(id, name)?),
             Request::Start { id } => json!(self.manager.start(id)?),
