@@ -5,7 +5,7 @@ import {
   Status,
   HostInfo,
   SdkInfo,
-  NetworkReport, SetupStatus
+  NetworkReport, SetupStatus, QaReport
 } from './types.js';
 
 declare const window: Window & {
@@ -24,6 +24,7 @@ export interface IApiClient {
   connect(root: string, sdkRoot?: string | null): Promise<void>;
   installRuntime(sdkRoot: string): Promise<void>;
   installGooglePlay(): Promise<void>;
+  qaRuntimeCheck(): Promise<QaReport>;
   beginManagedSetup(): Promise<string>;
   managedSetupStatus(): Promise<SetupStatus>;
   managedSetupAnswer(yes: boolean): Promise<void>;
@@ -77,6 +78,7 @@ class TauriApiClient implements IApiClient {
     return this.invoke<void>('install_android_runtime', { sdkRoot });
   }
   installGooglePlay(): Promise<void> { return this.invoke<void>('install_google_play'); }
+  qaRuntimeCheck(): Promise<QaReport> { return this.invoke<QaReport>('qa_runtime_check'); }
   beginManagedSetup(): Promise<string> { return this.invoke<string>('begin_managed_setup', { reviewed: true }); }
   managedSetupStatus(): Promise<SetupStatus> { return this.invoke<SetupStatus>('managed_setup_status'); }
   managedSetupAnswer(yes: boolean): Promise<void> { return this.invoke<void>('managed_setup_answer', { yes }); }
@@ -219,6 +221,7 @@ class BrowserPreviewClient implements IApiClient {
     throw new Error('Runtime installation requires the native desktop app.');
   }
   async installGooglePlay(): Promise<void> { throw new Error('Image installation requires the native app.'); }
+  async qaRuntimeCheck(): Promise<QaReport> { throw new Error('QA testing requires the native app.'); }
   async beginManagedSetup(): Promise<string> { throw new Error('Setup requires the native app.'); }
   async managedSetupStatus(): Promise<SetupStatus> { throw new Error('Setup requires the native app.'); }
   async managedSetupAnswer(_yes: boolean): Promise<void> { throw new Error('Setup requires the native app.'); }

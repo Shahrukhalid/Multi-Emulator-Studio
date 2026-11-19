@@ -8,6 +8,7 @@ pub mod manager;
 pub mod model;
 pub mod network;
 pub mod runtime;
+pub mod runtime_qa;
 pub mod storage;
 
 pub use error::{Error, Result};

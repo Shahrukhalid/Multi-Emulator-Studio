@@ -95,6 +95,7 @@ export class App {
       '',
       {
         onManagedStart: () => this.api.beginManagedSetup(),
+        onRunQa: () => this.api.qaRuntimeCheck(),
         onManagedStatus: () => this.api.managedSetupStatus(),
         onManagedAnswer: yes => this.api.managedSetupAnswer(yes),
         onManagedCancel: () => this.api.cancelManagedSetup(),

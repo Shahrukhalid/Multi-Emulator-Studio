@@ -14,6 +14,7 @@ use tauri_plugin_dialog::DialogExt;
 type Shared = Arc<Mutex<Option<Controller>>>;
 type HealthCache = Arc<Mutex<Option<Result<serde_json::Value, ApiError>>>>;
 static IMAGE_INSTALL: Mutex<()> = Mutex::new(());
+static QA_RUNNING: Mutex<()> = Mutex::new(());
 static MANAGED_SETUP: Mutex<Option<(PathBuf, multi_emulator_core::managed_sdk::SetupSession)>> =
     Mutex::new(None);
 
@@ -22,6 +23,56 @@ fn setup_error(message: &str) -> ApiError {
         code: "conflict",
         message: message.into(),
     }
+}
+
+#[tauri::command]
+async fn qa_runtime_check(
+    app: tauri::AppHandle,
+    state: State<'_, Shared>,
+) -> Result<multi_emulator_core::runtime_qa::QaReport, ApiError> {
+    if app.config().identifier != "com.nexonic.multiemulatorstudio.qa" {
+        return Err(setup_error(
+            "Runtime self-test is available only in the isolated QA build",
+        ));
+    }
+    let data = app
+        .path()
+        .app_local_data_dir()
+        .map_err(|err| setup_error(&err.to_string()))?;
+    let shared = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let _qa = QA_RUNNING
+            .try_lock()
+            .map_err(|_| setup_error("Runtime self-test already running"))?;
+        let _install = IMAGE_INSTALL
+            .try_lock()
+            .map_err(|_| setup_error("Wait for Android package installation"))?;
+        let mut controller = shared
+            .try_lock()
+            .map_err(|_| setup_error("Controller busy; try again"))?;
+        let controller = controller
+            .as_mut()
+            .ok_or_else(|| setup_error("Complete Quick setup first"))?;
+        let sdk = controller.sdk();
+        let managed = multi_emulator_core::managed_sdk::managed_root(&data)
+            .canonicalize()
+            .map_err(|err| setup_error(&err.to_string()))?;
+        if sdk.root != managed {
+            return Err(setup_error("QA self-test requires the private managed SDK"));
+        }
+        if !controller
+            .execute(Request::List)?
+            .as_array()
+            .is_some_and(|profiles| profiles.is_empty())
+        {
+            return Err(setup_error(
+                "Run the disposable self-test before creating any QA profiles",
+            ));
+        }
+        Ok(multi_emulator_core::runtime_qa::run(sdk, &data))
+    })
+    .await
+    .map_err(|err| setup_error(&err.to_string()))?
 }
 
 #[tauri::command]
@@ -273,6 +324,9 @@ async fn dispatch(
 ) -> Result<serde_json::Value, ApiError> {
     let s = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
+        if QA_RUNNING.try_lock().is_err() {
+            return Err(setup_error("Runtime self-test is running"));
+        }
         let _image_guard = if matches!(
             &request,
             Request::Create { .. } | Request::CloneProfile { .. }
@@ -387,6 +441,7 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             connect,
+            qa_runtime_check,
             begin_managed_setup,
             managed_setup_status,
             managed_setup_answer,

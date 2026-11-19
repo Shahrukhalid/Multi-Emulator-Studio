@@ -1,7 +1,8 @@
-import { HostInfo, SdkInfo, NetworkReport, SetupStatus } from '../types.js';
+import { HostInfo, SdkInfo, NetworkReport, SetupStatus, QaReport } from '../types.js';
 import { ManagedSetupFlow } from '../managed_setup_flow.js';
 
 export interface SettingsCallbacks {
+  onRunQa: () => Promise<QaReport>;
   onManagedStart: () => Promise<string>;
   onManagedStatus: () => Promise<SetupStatus>;
   onManagedAnswer: (yes: boolean) => Promise<void>;
@@ -34,6 +35,8 @@ export class SettingsComponent {
   private installing = false;
   private installMessage = '';
   private managedFlow: ManagedSetupFlow;
+  private qaRunning = false;
+  private qaReport = '';
 
   constructor(
     host: HostInfo | null,
@@ -111,6 +114,13 @@ export class SettingsComponent {
           <p class="view-subtitle">Manage application appearance, Android SDK runtime setup, and advanced options.</p>
         </div>
       </div>
+
+      ${this.connected && this.dataDir.endsWith('com.nexonic.multiemulatorstudio.qa') ? `<div class="settings-card">
+        <h3 class="settings-card-title">Native runtime self-test</h3>
+        <p class="form-helper-text">Boot two disposable Android devices, check Google Play and YouTube, capture screens, and verify independent shutdown. Close any other running emulators before starting. May take several minutes.</p>
+        <button class="nav-item" id="qa-run" ${this.qaRunning || this.installing ? 'disabled' : ''}>${this.qaRunning ? 'Running native checks…' : 'Run two-device test'}</button>
+        <pre id="qa-report" style="white-space:pre-wrap;max-height:260px;overflow:auto" role="status"></pre>
+      </div>` : ''}
 
       ${!this.connected ? `<div class="settings-card">
         <h3 class="settings-card-title">Quick setup — Android runtime</h3>
@@ -318,6 +328,20 @@ export class SettingsComponent {
 
     const confirm = this.element.querySelector('#runtime-license-confirm') as HTMLInputElement;
     const managedStart = this.element.querySelector<HTMLButtonElement>('#managed-start');
+    const qaReport = this.element.querySelector('#qa-report');
+    if (qaReport) qaReport.textContent = this.qaReport;
+    this.element.querySelector('#qa-run')?.addEventListener('click', async () => {
+      if (this.qaRunning || this.installing) return;
+      if (!window.confirm('Start two temporary QA devices? Close other emulators first. The test will remove only the devices it creates.')) return;
+      this.qaRunning = true;
+      this.qaReport = 'Testing native runtime; this may take several minutes…';
+      this.render();
+      try {
+        const result = await this.callbacks.onRunQa();
+        this.qaReport = [result.passed ? 'PASS' : 'NOT PASSED', ...result.checks, ...(result.failure ? [result.failure] : []), ...result.cleanup_errors].join('\n');
+      } catch (error) { this.qaReport = 'Test not completed: ' + ((error as { message?: string }).message || String(error)); }
+      finally { this.qaRunning = false; this.render(); }
+    });
     const consent = this.element.querySelector<HTMLInputElement>('#managed-consent');
     consent?.addEventListener('change', () => { if (managedStart) managedStart.disabled = !consent.checked || this.installing; });
     managedStart?.addEventListener('click', async () => {

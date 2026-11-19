@@ -139,3 +139,9 @@ No production merge or release until the applicable gates are verified. A CI-gen
 - On the owner's Apple Silicon Mac, the official command-line tools URL responded successfully and official Temurin metadata returned an ARM64 macOS Java 21 archive and SHA-256. The existing machine SDK has only the Google APIs Android 14 image, not the Google Play image.
 - The connected execution context denied a macOS CPU capability query; previous Qt/NEON preflight failures in this context do not establish physical CPU incompatibility. Clarify the diagnostic and require normal desktop testing instead of bypassing checks.
 - Full downloads, interactive license acceptance, real guest boot, performance and YouTube checks require the owner's QA run. Do not claim these passed from build or endpoint checks alone.
+
+## M4.9 — native runtime self-test
+
+- Add a QA-only user-initiated two-device self-test using the private managed SDK. It validates the official emulator probe, concurrent boot and distinct managed processes, Google apps, local Home input, five PNG captures per guest, independent shutdown and cleanup. No ordinary profiles are modified; the QA app requires an empty profile list and the private SDK.
+- Surface pass/failure, capture timing and cleanup diagnostics inside Settings. The test cannot pass when preflight fails, an app is missing or disposable cleanup fails. Unit tests exercise failure before guest creation; real native execution has not yet been observed.
+- The isolated QA setup has not been completed on the owner host. Native verification, full installer acceptance, video streaming and production signing remain release blockers.
