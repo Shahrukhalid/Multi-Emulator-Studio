@@ -2,6 +2,11 @@ name: Desktop checks
 on:
   pull_request:
   workflow_dispatch:
+    inputs:
+      signed_macos:
+        description: 'Build and verify a Developer ID signed/notarized macOS candidate'
+        type: boolean
+        default: false
 permissions:
   contents: read
 concurrency:
@@ -59,3 +64,41 @@ jobs:
             desktop/target/release/bundle/SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 7
+
+  signed-macos:
+    if: github.event_name == 'workflow_dispatch' && inputs.signed_macos && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/milestone/m3-6-release-candidate')
+    needs: desktop
+    runs-on: macos-15
+    environment: macos-signing
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - run: rustup toolchain install stable --profile minimal
+      - run: npm ci --ignore-scripts
+      - run: npm run build
+      - run: cargo install tauri-cli --version 2.12.4 --locked
+      - name: Sign, notarize and verify the DMG
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_PRIVATE_KEY: ${{ secrets.APPLE_API_PRIVATE_KEY }}
+        run: bash sign-macos.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: verified-signed-macOS-ARM64
+          path: |
+            desktop/target/release/bundle/dmg/*.dmg
+            desktop/target/release/bundle/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 14

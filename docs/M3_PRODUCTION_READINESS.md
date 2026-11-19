@@ -67,3 +67,9 @@ No production merge or release until the applicable gates are verified. A CI-gen
 - Add one structured, fail-closed version and acceleration preflight shared by the desktop, CLI and smoke test. Do not launch a guest when the version probe fails. Display the actual diagnostic rather than treating a detected SDK or successful acceleration as runtime readiness.
 - Next prerequisite: verify the official Android Emulator launches through Android Studio on a compatible physical macOS or Windows host using the supported SDK Manager installation. If the official emulator fails there, resolve that environment through official support before repeating the disposable smoke test. No host security changes, SDK replacement, or automatic retries were attempted.
 - Production release remains blocked by native execution and clean-install verification.
+
+## Eighth increment — macOS signing and installer integrity
+
+- A downloaded unsigned development build was rejected by macOS as damaged. This alert alone does not establish the exact signature defect; do not override Gatekeeper.
+- Add an owner-approved manual Developer ID signing and notarization job with a protected environment, explicit credential checks, temporary signing keychain, accepted notarization, stapled ticket validation, read-only DMG verification, app signature and Gatekeeper assessment, and final checksums. Ordinary PR artifacts remain clearly labeled unsigned.
+- Owner certificate and notarization credentials are required before the new signed candidate can be built. See `docs/MACOS_SIGNING.md`. Production release remains blocked until signed build verification and real runtime testing succeed.
