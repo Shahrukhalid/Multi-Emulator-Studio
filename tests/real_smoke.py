@@ -6,6 +6,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from build_fixture import PACKAGE, build_fixture
 
 def main():
     if len(sys.argv) != 2:
@@ -26,13 +27,18 @@ def main():
         data=json.loads(p.stdout.readline())
         if "error" in data: raise RuntimeError(data["error"])
         return data["ok"]
-    def guest(port,*args):
-        return subprocess.check_output([str(adb),"-s",f"emulator-{port}",*args],text=True,timeout=20).strip()
+    def guest(device_id, port,*args):
+        command = [str(adb), "-s", f"emulator-{port}"]
+        identity = subprocess.check_output([*command,"emu","avd","name"],text=True,timeout=20)
+        if "mes_" + device_id.replace("-","") not in identity.splitlines():
+            raise RuntimeError("managed emulator identity changed")
+        return subprocess.check_output([*command,*args],text=True,timeout=20).strip()
     try:
         print("HOST",call("host"),flush=True)
         print("ACCELERATION",call("acceleration"),flush=True)
         image=next((i for i in call("images") if "android-34" in i),None)
         if not image: raise RuntimeError("no Android 14 image installed")
+        apk = build_fixture(sdk, root / "fixture")
         spec=dict(name="Smoke A",image=image,hardware_profile="pixel_6",ram_mb=2048,cores=2,width=720,height=1280,disk_mb=2048,locale="en-US")
         for name in ("Smoke A","Smoke B"):
             spec["name"]=name
@@ -53,10 +59,17 @@ def main():
         else: raise RuntimeError("boot deadline exceeded")
         ports=[s["console_port"] for s in statuses]
         print("ADDRESSES",[s["addresses"] for s in statuses],flush=True)
-        for port,marker in zip(ports,("mes-alpha","mes-bravo")):
-            guest(port,"shell","settings","put","system","mes_smoke_marker",marker)
-        assert guest(ports[0],"shell","settings","get","system","mes_smoke_marker")=="mes-alpha"
-        assert guest(ports[1],"shell","settings","get","system","mes_smoke_marker")=="mes-bravo"
+        call("install_apk",id=ids[0],path=str(apk))
+        assert guest(ids[0],ports[0],"shell","pm","list","packages",PACKAGE) == "package:" + PACKAGE
+        assert guest(ids[1],ports[1],"shell","pm","list","packages",PACKAGE) == ""
+        call("install_apk",id=ids[1],path=str(apk))
+        for device_id,port,marker in zip(ids,ports,("mes-alpha","mes-bravo")):
+            guest(device_id,port,"shell","settings","put","system","mes_smoke_marker",marker)
+            # Only the disposable debuggable package's private directory is accessed.
+            guest(device_id,port,"shell","run-as",PACKAGE,"sh","-c",f"'printf %s {marker} > mes-smoke-marker'")
+        for device_id,port,marker in zip(ids,ports,("mes-alpha","mes-bravo")):
+            assert guest(device_id,port,"shell","settings","get","system","mes_smoke_marker")==marker
+            assert guest(device_id,port,"shell","run-as",PACKAGE,"cat","mes-smoke-marker")==marker
         call("stop",id=ids[0])
         assert call("status",id=ids[1])["state"]=="ready"
         call("start",id=ids[0])
@@ -67,17 +80,25 @@ def main():
             if s["state"]=="crashed":raise RuntimeError("restart crashed")
             time.sleep(5)
         else:raise RuntimeError("restart deadline exceeded")
-        assert guest(s["console_port"],"shell","settings","get","system","mes_smoke_marker")=="mes-alpha"
-        print("PASS: two process identities, ports, isolated settings and persistence after restart",flush=True)
+        assert guest(ids[0],s["console_port"],"shell","settings","get","system","mes_smoke_marker")=="mes-alpha"
+        assert guest(ids[0],s["console_port"],"shell","run-as",PACKAGE,"cat","mes-smoke-marker")=="mes-alpha"
+        print("PASS: two process identities, ports, isolated installed apps, private app data, settings and persistence after restart",flush=True)
     finally:
+        cleanup_errors = []
         for i in ids:
             try: call("stop",id=i)
-            except Exception as e: print("STOP ERROR",e,flush=True)
+            except Exception as e: cleanup_errors.append(f"stop {i}: {e}")
             try: call("delete",id=i)
-            except Exception as e: print("DELETE ERROR",e,flush=True)
+            except Exception as e: cleanup_errors.append(f"delete {i}: {e}")
         p.stdin.close()
-        try:p.wait(timeout=30)
-        except subprocess.TimeoutExpired:p.kill();p.wait()
+        try:
+            if p.wait(timeout=30) != 0:
+                cleanup_errors.append("controller exited nonzero")
+        except subprocess.TimeoutExpired:
+            p.kill();p.wait()
+            cleanup_errors.append("controller failed to exit")
+        if cleanup_errors:
+            raise RuntimeError("Smoke cleanup failed: " + "; ".join(cleanup_errors))
 
 if __name__=="__main__":
     main()

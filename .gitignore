@@ -12,4 +12,5 @@
 .env*
 *.p12
 *.keystore
+__pycache__/
 
