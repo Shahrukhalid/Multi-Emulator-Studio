@@ -31,3 +31,7 @@ On a supported clean physical macOS or Windows host with no Android Studio, Java
 5. Verify existing-device upgrade separately with a backed-up test profile. Keep its original SDK path and app data intact.
 
 This is a manual acceptance gate, not a claim that these tests have passed.
+
+### Isolated desktop QA build
+
+On a development Mac, build `cd desktop && cargo tauri build --debug --bundles app --config tauri.qa.conf.json`. This uses a distinct application identifier and data directory, ignores automatic discovery of machine-wide SDKs, and exercises the managed first-run setup. It is not an end-user release. Leave the normal app and SDK intact. QA app data persists between runs; use a fresh QA OS account for repeated clean-machine tests rather than deleting user data. The owner must review and respond to official license prompts in the QA app.

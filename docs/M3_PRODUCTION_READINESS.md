@@ -132,3 +132,10 @@ No production merge or release until the applicable gates are verified. A CI-gen
 - Maintain setup phase, installer log and pending license state independently of Settings DOM. Re-rendering cannot lose the active session or prompt; competing license actions are serialized and a failed cancellation does not pretend setup stopped.
 - Added automated desktop tests for separate license responses, duplicate clicks, cancellation retry, diagnostic retention and preventing connection after a failed installation. Run them on macOS and Windows in desktop CI.
 - Actual clean-host downloads, boot, app availability and native encoded streaming remain separate release gates.
+
+## M4.8 — isolated first-run QA and compatibility diagnostics
+
+- Provide a separately identified development QA bundle which intentionally uses only its own managed SDK for automatic discovery. Existing production devices, metadata and SDK paths are untouched. This supports realistic first-run testing even when the host already has Android Studio or SDK tools.
+- On the owner's Apple Silicon Mac, the official command-line tools URL responded successfully and official Temurin metadata returned an ARM64 macOS Java 21 archive and SHA-256. The existing machine SDK has only the Google APIs Android 14 image, not the Google Play image.
+- The connected execution context denied a macOS CPU capability query; previous Qt/NEON preflight failures in this context do not establish physical CPU incompatibility. Clarify the diagnostic and require normal desktop testing instead of bypassing checks.
+- Full downloads, interactive license acceptance, real guest boot, performance and YouTube checks require the owner's QA run. Do not claim these passed from build or endpoint checks alone.

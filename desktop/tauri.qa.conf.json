@@ -1,0 +1,7 @@
+{
+  "productName": "Multi-Emulator Studio QA",
+  "identifier": "com.nexonic.multiemulatorstudio.qa",
+  "app": {
+    "windows": [{ "title": "Multi-Emulator Studio — Isolated Setup QA", "width": 1100, "height": 760 }]
+  }
+}

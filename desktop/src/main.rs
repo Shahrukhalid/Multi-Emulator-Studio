@@ -133,10 +133,23 @@ fn health(cache: State<'_, HealthCache>) -> Result<serde_json::Value, ApiError> 
 
 #[tauri::command]
 async fn connect(
+    app: tauri::AppHandle,
     root: PathBuf,
     sdk_root: Option<PathBuf>,
     state: State<'_, Shared>,
 ) -> Result<(), ApiError> {
+    // A separately identified QA app intentionally ignores a machine-wide SDK.
+    // Production builds retain discovery and existing profile compatibility.
+    let sdk_root =
+        if app.config().identifier == "com.nexonic.multiemulatorstudio.qa" && sdk_root.is_none() {
+            let data = app
+                .path()
+                .app_local_data_dir()
+                .map_err(|e| setup_error(&e.to_string()))?;
+            Some(multi_emulator_core::managed_sdk::managed_root(&data))
+        } else {
+            sdk_root
+        };
     let s = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
         let setup = MANAGED_SETUP

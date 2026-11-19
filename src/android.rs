@@ -235,7 +235,7 @@ fn evaluate_preflight(
             return result;
         }
         Err(err) => {
-            result.diagnostic = format!("Official emulator cannot start its version probe: {err}. Verify host compatibility in Android Studio before retrying.");
+            result.diagnostic = format!("Official emulator cannot start its version probe in this execution context: {err}. Retry from the normal desktop application; restricted test sessions can interfere with CPU or virtualization checks. If it also fails there, check the official emulator and host compatibility.");
             return result;
         }
     }
