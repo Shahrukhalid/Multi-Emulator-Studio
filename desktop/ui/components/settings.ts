@@ -37,6 +37,7 @@ export class SettingsComponent {
   private managedFlow: ManagedSetupFlow;
   private qaRunning = false;
   private qaReport = '';
+  private qaEvidence = '';
 
   constructor(
     host: HostInfo | null,
@@ -120,6 +121,12 @@ export class SettingsComponent {
         <p class="form-helper-text">Boot two disposable Android devices, check Google Play and YouTube, capture screens, and verify independent shutdown. Close any other running emulators before starting. May take several minutes.</p>
         <button class="nav-item" id="qa-run" ${this.qaRunning || this.installing ? 'disabled' : ''}>${this.qaRunning ? 'Running native checks…' : 'Run two-device test'}</button>
         <pre id="qa-report" style="white-space:pre-wrap;max-height:260px;overflow:auto" role="status"></pre>
+        <div id="qa-evidence-panel" hidden>
+          <label class="form-helper-text" for="qa-evidence">Runtime report (JSON, for troubleshooting; not a release attestation)</label>
+          <textarea id="qa-evidence" readonly rows="6" class="form-text-input" style="width:100%;user-select:text;"></textarea>
+          <button class="nav-item" id="qa-copy">Copy report</button>
+          <span id="qa-copy-status" role="status" class="form-helper-text"></span>
+        </div>
       </div>` : ''}
 
       ${!this.connected ? `<div class="settings-card">
@@ -330,14 +337,25 @@ export class SettingsComponent {
     const managedStart = this.element.querySelector<HTMLButtonElement>('#managed-start');
     const qaReport = this.element.querySelector('#qa-report');
     if (qaReport) qaReport.textContent = this.qaReport;
+    const evidencePanel = this.element.querySelector<HTMLElement>('#qa-evidence-panel');
+    const evidence = this.element.querySelector<HTMLTextAreaElement>('#qa-evidence');
+    if (evidencePanel && evidence) { evidencePanel.hidden = !this.qaEvidence; evidence.value = this.qaEvidence; }
+    this.element.querySelector('#qa-copy')?.addEventListener('click', async () => {
+      if (!evidence || !this.qaEvidence) return;
+      const status = this.element.querySelector('#qa-copy-status');
+      try { await navigator.clipboard.writeText(this.qaEvidence); if (status) status.textContent = 'Copied'; }
+      catch { evidence.focus(); evidence.select(); if (status) status.textContent = 'Report selected; use your keyboard copy shortcut.'; }
+    });
     this.element.querySelector('#qa-run')?.addEventListener('click', async () => {
       if (this.qaRunning || this.installing) return;
       if (!window.confirm('Start two temporary QA devices? Close other emulators first. The test will remove only the devices it creates.')) return;
       this.qaRunning = true;
+      this.qaEvidence = '';
       this.qaReport = 'Testing native runtime; this may take several minutes…';
       this.render();
       try {
         const result = await this.callbacks.onRunQa();
+        this.qaEvidence = JSON.stringify(result, null, 2);
         this.qaReport = [result.passed ? 'PASS' : 'NOT PASSED', ...result.checks, ...(result.failure ? [result.failure] : []), ...result.cleanup_errors].join('\n');
       } catch (error) { this.qaReport = 'Test not completed: ' + ((error as { message?: string }).message || String(error)); }
       finally { this.qaRunning = false; this.render(); }

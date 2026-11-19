@@ -20,9 +20,11 @@ jobs:
         include:
           - os: macos-15
             bundle: dmg
+            candidate: macos-arm64-development
             artifact: development-adhoc-macOS-ARM64
           - os: windows-2022
             bundle: nsis
+            candidate: windows-x64-development
             artifact: development-unsigned-Windows-X64
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
@@ -49,6 +51,7 @@ jobs:
       - run: node --test verify-packages.test.mjs
       - run: node --test frame-scheduler.test.mjs
       - run: node --test managed-setup-flow.test.mjs
+      - run: node --test candidate-manifest.test.mjs release-readiness.test.mjs
       - run: cargo +stable fmt --check
       - run: cargo +stable clippy --locked --all-targets -- -D warnings
       - run: cargo +stable test --locked
@@ -66,6 +69,7 @@ jobs:
       - if: runner.os == 'Windows'
         run: cargo tauri build --bundles nsis --no-sign --ci -- --locked
       - run: node verify-packages.mjs target/release/bundle ${{ matrix.bundle }}
+      - run: node candidate-manifest.mjs target/release/bundle ${{ matrix.candidate }}
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
@@ -73,6 +77,7 @@ jobs:
             desktop/target/release/bundle/**/*.dmg
             desktop/target/release/bundle/**/*.exe
             desktop/target/release/bundle/SHA256SUMS.txt
+            desktop/target/release/bundle/CANDIDATE.json
           if-no-files-found: error
           retention-days: 7
 
@@ -105,11 +110,13 @@ jobs:
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
           APPLE_API_PRIVATE_KEY: ${{ secrets.APPLE_API_PRIVATE_KEY }}
         run: bash sign-macos.sh
+      - run: node candidate-manifest.mjs target/release/bundle macos-arm64-signed
       - uses: actions/upload-artifact@v4
         with:
           name: verified-signed-macOS-ARM64
           path: |
             desktop/target/release/bundle/dmg/*.dmg
             desktop/target/release/bundle/SHA256SUMS.txt
+            desktop/target/release/bundle/CANDIDATE.json
           if-no-files-found: error
           retention-days: 14

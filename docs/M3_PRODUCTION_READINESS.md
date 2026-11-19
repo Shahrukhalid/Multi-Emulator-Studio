@@ -145,3 +145,9 @@ No production merge or release until the applicable gates are verified. A CI-gen
 - Add a QA-only user-initiated two-device self-test using the private managed SDK. It validates the official emulator probe, concurrent boot and distinct managed processes, Google apps, local Home input, five PNG captures per guest, independent shutdown and cleanup. No ordinary profiles are modified; the QA app requires an empty profile list and the private SDK.
 - Surface pass/failure, capture timing and cleanup diagnostics inside Settings. The test cannot pass when preflight fails, an app is missing or disposable cleanup fails. Unit tests exercise failure before guest creation; real native execution has not yet been observed.
 - The isolated QA setup has not been completed on the owner host. Native verification, full installer acceptance, video streaming and production signing remain release blockers.
+
+## M5 — release preparation (first increment)
+
+- M4.9 core and desktop CI completed successfully on both supported platform runners. Add exact-commit candidate manifests with artifact size and SHA-256; preserve development/unsigned labels and distinguish notarized candidates.
+- Add a fail-closed release evidence completeness and integrity check with tests for stale commits, missing runtime outcomes, unsigned packages and modified files. See `docs/RELEASE_READINESS.md`; the template intentionally contains pending values. Physical-host evidence and OS signature validation are still required and are not inferred from this script.
+- Native streaming and actual clean setup/guest verification remain open. Do not publish or merge a production release solely because CI passed.
