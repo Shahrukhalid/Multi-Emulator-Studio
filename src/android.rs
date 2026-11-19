@@ -70,7 +70,7 @@ fn capture_png(cmd: &mut Command) -> Result<ScreenFrame> {
         .stdout(stdout.try_clone()?)
         .stderr(Stdio::null())
         .spawn()?;
-    let deadline = Instant::now() + Duration::from_secs(10);
+    let deadline = Instant::now() + Duration::from_secs(3);
     let limit = 16 * 1024 * 1024;
     loop {
         if stdout.metadata()?.len() > limit || Instant::now() >= deadline {
@@ -577,6 +577,22 @@ impl Android {
         s.console_port
             .ok_or_else(|| Error::Conflict("missing port".into()))
     }
+    // Interactive operations do not need a full network-address/status scan.
+    // Still verify the running child and its AVD identity before every command.
+    fn interactive_port(&mut self, d: &Device) -> Result<u16> {
+        let instance = self
+            .active
+            .get_mut(&d.id)
+            .ok_or_else(|| Error::Conflict("device is not running".into()))?;
+        if instance.child.try_wait()?.is_some() {
+            return Err(Error::Conflict("device has stopped".into()));
+        }
+        let port = instance.port;
+        if !instance.ever_ready || !self.owns_port(d, port) {
+            return Err(Error::Conflict("device is not ready".into()));
+        }
+        Ok(port)
+    }
     fn owns_port(&self, d: &Device, port: u16) -> bool {
         run(
             self.adb_for(port).args(["emu", "avd", "name"]),
@@ -944,7 +960,7 @@ impl Engine for Android {
         log_tail(&self.log_path(d), 64 * 1024).map_err(Error::from)
     }
     fn screen(&mut self, d: &Device) -> Result<ScreenFrame> {
-        let port = self.ready_port(d)?;
+        let port = self.interactive_port(d)?;
         capture_png(self.adb_for(port).args(["exec-out", "screencap", "-p"]))
     }
     fn navigate(&mut self, d: &Device, key: NavigationKey) -> Result<()> {
@@ -952,12 +968,15 @@ impl Engine for Android {
             NavigationKey::Back => "KEYCODE_BACK",
             NavigationKey::Home => "KEYCODE_HOME",
             NavigationKey::Recents => "KEYCODE_APP_SWITCH",
+            NavigationKey::VolumeUp => "KEYCODE_VOLUME_UP",
+            NavigationKey::VolumeDown => "KEYCODE_VOLUME_DOWN",
+            NavigationKey::Power => "KEYCODE_POWER",
         };
-        let port = self.ready_port(d)?;
+        let port = self.interactive_port(d)?;
         run(
             self.adb_for(port).args(["shell", "input", "keyevent", key]),
             None,
-            SHORT,
+            Duration::from_secs(3),
         )?;
         Ok(())
     }
@@ -969,7 +988,7 @@ impl Engine for Android {
         if coordinates.iter().any(|&n| n >= 4320) {
             return Err(Error::Invalid("Touch coordinate out of bounds".into()));
         }
-        let port = self.ready_port(d)?;
+        let port = self.interactive_port(d)?;
         let mut cmd = self.adb_for(port);
         cmd.args([
             "shell",
@@ -984,7 +1003,7 @@ impl Engine for Android {
         if coordinates.len() == 4 {
             cmd.arg("250");
         }
-        run(&mut cmd, None, SHORT)?;
+        run(&mut cmd, None, Duration::from_secs(3))?;
         Ok(())
     }
 }

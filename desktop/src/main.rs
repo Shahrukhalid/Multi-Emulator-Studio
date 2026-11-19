@@ -87,10 +87,18 @@ async fn dispatch(
 ) -> Result<serde_json::Value, ApiError> {
     let s = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        let mut guard = s.lock().map_err(|_| ApiError {
-            code: "internal",
-            message: "controller lock poisoned".into(),
-        })?;
+        // Screen refresh is expendable; never queue it behind a lifecycle command.
+        let mut guard = if matches!(&request, Request::Screen { .. }) {
+            s.try_lock().map_err(|_| ApiError {
+                code: "unavailable",
+                message: "Device controller busy; retrying screen refresh".into(),
+            })?
+        } else {
+            s.lock().map_err(|_| ApiError {
+                code: "internal",
+                message: "controller lock poisoned".into(),
+            })?
+        };
         guard
             .as_mut()
             .ok_or_else(|| ApiError {

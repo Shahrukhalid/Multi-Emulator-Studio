@@ -62,7 +62,7 @@ export interface RuntimePreflight {
 }
 
 export interface ScreenFrame { png_base64: string; width: number; height: number; }
-export type NavigationKey = 'back' | 'home' | 'recents';
+export type NavigationKey = 'back' | 'home' | 'recents' | 'volume_up' | 'volume_down' | 'power';
 export type TouchInput = { kind: 'tap'; x: number; y: number } | { kind: 'swipe'; x: number; y: number; end_x: number; end_y: number };
 
 export interface AddressOverlap {

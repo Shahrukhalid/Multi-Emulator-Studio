@@ -17,6 +17,25 @@ pub enum NavigationKey {
     Back,
     Home,
     Recents,
+    VolumeUp,
+    VolumeDown,
+    Power,
+}
+
+#[cfg(test)]
+#[test]
+fn phone_key_contract_is_allowlisted() {
+    for key in [
+        "back",
+        "home",
+        "recents",
+        "volume_up",
+        "volume_down",
+        "power",
+    ] {
+        assert!(serde_json::from_value::<NavigationKey>(serde_json::json!(key)).is_ok());
+    }
+    assert!(serde_json::from_value::<NavigationKey>(serde_json::json!("unknown")).is_err());
 }
 
 #[derive(Debug, Deserialize)]

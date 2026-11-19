@@ -93,3 +93,10 @@ No production merge or release until the applicable gates are verified. A CI-gen
 - Start managed Android emulators without external windows by default and display actual local screen captures in an in-app phone viewer. Three bottom navigation buttons and user-initiated taps/swipes are routed only to the selected, identity-verified managed device. The viewer is a bounded screenshot refresh, not a high-frame-rate streaming engine. `MES_HEADLESS=0` remains an explicit development diagnostic mode.
 - Successful process exit is treated as stopped, not crashed. Nonzero exits retain diagnostics; detailed log excerpts are collapsed instead of filling the device card.
 - Embedded rendering and navigation require real-host testing; no runtime success is asserted for the new mode until observed.
+
+## M4.2 — responsive embedded controls
+
+- Request the next visible screen frame 250 ms after completion, rather than 750 ms, without overlapping captures. Pause refresh in hidden windows and back off on errors; retain the last frame with input disabled while reconnecting. Refresh immediately after user input when no capture is in flight.
+- Verify the managed running process and AVD identity before every interactive command without repeatedly collecting network addresses. Bound individual capture and input commands to three seconds; skip screen requests when the desktop controller is busy.
+- Provide explicit volume and power controls underneath the three navigation buttons. Test the key allowlist and exercise volume on disposable Android guests in the real smoke gate.
+- The screenshot polling interval is not a measured frame rate; real-host responsiveness and simultaneous guest capacity remain unverified.

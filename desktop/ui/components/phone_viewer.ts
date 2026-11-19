@@ -7,7 +7,11 @@ export class PhoneViewer {
   private timer: number | null = null;
   private frame: ScreenFrame | null = null;
   private busy = false;
-  private start: { x: number; y: number } | null = null;
+  private capturing = false;
+  private failures = 0;
+  private terminal = false;
+  private start: { x: number; y: number; width: number; height: number } | null = null;
+  private visibilityChanged = () => this.schedule(0);
 
   constructor(private api: IApiClient, private device: Device, onClose: () => void) {
     this.element.className = 'modal-backdrop';
@@ -18,25 +22,29 @@ export class PhoneViewer {
         <button data-key="back" aria-label="Back" title="Back" disabled>◁</button>
         <button data-key="home" aria-label="Home" title="Home" disabled>○</button>
         <button data-key="recents" aria-label="Recent apps" title="Recent apps" disabled>□</button>
-      </nav><p class="phone-viewer-note">Local screen refresh · click to tap, drag to swipe</p>
+      </nav><div class="phone-hardware" aria-label="Device controls">
+        <button data-key="volume_down" disabled>Volume −</button>
+        <button data-key="volume_up" disabled>Volume +</button>
+        <button data-key="power" disabled>Power</button>
+      </div><p class="phone-viewer-note" role="status">Local screen refresh · click to tap, drag to swipe</p>
     </section>`;
     this.element.querySelector('#phone-title')!.textContent = device.spec.name;
     this.element.querySelector('#phone-close')!.addEventListener('click', onClose);
     const image = this.element.querySelector('#phone-frame') as HTMLImageElement;
     image.addEventListener('pointerdown', e => {
       if (!this.frame || this.busy || e.button !== 0) return;
-      this.start = this.point(e, image);
+      this.start = { ...this.point(e, image), width: this.frame.width, height: this.frame.height };
       image.setPointerCapture(e.pointerId);
     });
     image.addEventListener('pointercancel', () => { this.start = null; });
     image.addEventListener('pointerup', e => {
       const start = this.start;
       this.start = null;
-      if (!start || !this.frame) return;
+      if (!start || !this.frame || start.width !== this.frame.width || start.height !== this.frame.height) return;
       const end = this.point(e, image);
       const input: TouchInput = Math.hypot(end.x - start.x, end.y - start.y) < 15
         ? { kind: 'tap', ...end }
-        : { kind: 'swipe', ...start, end_x: end.x, end_y: end.y };
+        : { kind: 'swipe', x: start.x, y: start.y, end_x: end.x, end_y: end.y };
       void this.send({ action: 'touch', id: this.device.id, input });
     });
     this.element.querySelectorAll<HTMLButtonElement>('[data-key]').forEach(button => {
@@ -46,10 +54,27 @@ export class PhoneViewer {
     });
   }
 
-  begin(): void { void this.refresh(); }
+  begin(): void {
+    document.addEventListener('visibilitychange', this.visibilityChanged);
+    this.schedule(0);
+  }
   dispose(): void {
     this.closed = true;
+    document.removeEventListener('visibilitychange', this.visibilityChanged);
     if (this.timer !== null) window.clearTimeout(this.timer);
+  }
+
+  private schedule(delay: number): void {
+    if (this.timer !== null) window.clearTimeout(this.timer);
+    this.timer = null;
+    if (this.closed || this.terminal || document.hidden || this.busy || this.capturing) return;
+    this.timer = window.setTimeout(() => { this.timer = null; void this.refresh(); }, delay);
+  }
+
+  private updateControls(): void {
+    this.element.querySelectorAll<HTMLButtonElement>('[data-key]').forEach(b => {
+      b.disabled = !this.frame || this.busy;
+    });
   }
 
   private point(e: PointerEvent, image: HTMLImageElement): { x: number; y: number } {
@@ -61,37 +86,57 @@ export class PhoneViewer {
   private async send(request: { action: 'navigate'; id: string; key: NavigationKey } | { action: 'touch'; id: string; input: TouchInput }): Promise<void> {
     if (!this.frame || this.busy || this.closed) return;
     this.busy = true;
+    this.schedule(0);
+    this.updateControls();
+    const note = this.element.querySelector('.phone-viewer-note')!;
     try { await this.api.dispatch<boolean>(request); }
-    catch { this.element.querySelector('#phone-status')!.textContent = 'Input failed; waiting for the device.'; }
-    finally { this.busy = false; }
+    catch { note.textContent = 'Input failed. Try again when the device responds.'; }
+    finally { this.busy = false; this.updateControls(); this.schedule(0); }
   }
 
   private async refresh(): Promise<void> {
-    if (this.closed) return;
+    if (this.closed || this.terminal || this.capturing || this.busy || document.hidden) return;
+    this.capturing = true;
     const status = this.element.querySelector('#phone-status')!;
     const image = this.element.querySelector('#phone-frame') as HTMLImageElement;
     try {
       const frame = await this.api.dispatch<ScreenFrame>({ action: 'screen', id: this.device.id });
       if (this.closed) return;
+      const src = `data:image/png;base64,${frame.png_base64}`;
+      if (image.src !== src) {
+        const decoded = new Image();
+        decoded.src = src;
+        await decoded.decode();
+        if (this.closed) return;
+        image.src = src;
+      }
       this.frame = frame;
-      image.src = `data:image/png;base64,${frame.png_base64}`;
+      this.failures = 0;
       image.hidden = false;
       status.textContent = '';
     } catch (err: unknown) {
       if (this.closed) return;
+      this.failures += 1;
       this.frame = null;
-      image.hidden = true;
+      this.start = null;
+      this.updateControls();
+      // Keep the last frame visible but non-interactive during a transient failure.
       const message = (err as { message?: string }).message || String(err);
       status.textContent = `Waiting for device: ${message.split('\n')[0].slice(0, 240)}`;
-      const state = await this.api.getDeviceStatus(this.device.id).catch(() => null);
+      const cached = (await this.api.health().catch(() => [])).find(s => s.id === this.device.id);
+      const state = this.failures >= 3 && (cached?.state === 'stopped' || cached?.state === 'crashed')
+        ? await this.api.getDeviceStatus(this.device.id).catch(() => null) : null;
       if (this.closed) return;
       if (state?.state === 'stopped' || state?.state === 'crashed') {
         status.textContent = state.state === 'stopped' ? 'Device stopped. Close this view to start again.' : 'Device stopped unexpectedly. See device diagnostics.';
-        this.element.querySelectorAll<HTMLButtonElement>('[data-key]').forEach(b => { b.disabled = true; });
+        this.terminal = true;
+        image.hidden = true;
         return;
       }
+    } finally {
+      this.capturing = false;
+      this.updateControls();
+      this.schedule(this.failures ? Math.min(4000, 500 * 2 ** Math.min(this.failures, 3)) : 250);
     }
-    this.element.querySelectorAll<HTMLButtonElement>('[data-key]').forEach(b => { b.disabled = !this.frame; });
-    if (!this.closed) this.timer = window.setTimeout(() => void this.refresh(), 750);
   }
 }

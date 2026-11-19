@@ -73,6 +73,8 @@ def main():
             assert frame["width"] > 0 and frame["height"] > 0
             assert base64.b64decode(frame["png_base64"], validate=True).startswith(b"\x89PNG\r\n\x1a\n")
             call("navigate", id=device_id, key="home")
+            call("navigate", id=device_id, key="volume_up")
+            call("navigate", id=device_id, key="volume_down")
         print("ADDRESSES",[s["addresses"] for s in statuses],flush=True)
         call("install_apk",id=ids[0],path=str(apk))
         assert guest(ids[0],ports[0],"shell","pm","list","packages",PACKAGE) == "package:" + PACKAGE
