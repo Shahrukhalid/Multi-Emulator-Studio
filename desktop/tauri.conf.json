@@ -1,0 +1,13 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Multi-Emulator Studio",
+  "version": "0.1.0",
+  "identifier": "com.nexonic.multiemulatorstudio",
+  "build": {"beforeBuildCommand": "npm run build", "frontendDist": "dist"},
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [{"title":"Multi-Emulator Studio","width":1100,"height":760}],
+    "security": {"csp": "default-src 'self'; script-src 'self'; style-src 'self'; connect-src ipc: http://ipc.localhost"}
+  },
+  "bundle": {"active": true, "targets": "all", "icon":["icons/icon.png","icons/icon.ico"]}
+}

@@ -2,6 +2,7 @@
 /desktop/target/
 /desktop/node_modules/
 /desktop/dist/
+/desktop/icons/
 *.db
 *.db-wal
 *.db-shm

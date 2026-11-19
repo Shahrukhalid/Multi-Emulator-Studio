@@ -1,0 +1,13 @@
+[package]
+name = "multi-emulator-studio"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+multi-emulator-core = { path = ".." }
+tauri = "2"
+serde_json = "1"
+
+[build-dependencies]
+tauri-build = "2"

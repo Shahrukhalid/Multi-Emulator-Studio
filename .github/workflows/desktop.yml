@@ -1,0 +1,61 @@
+name: Desktop checks
+on:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: desktop-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            bundle: dmg
+          - os: windows-2022
+            bundle: nsis
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - run: rustup toolchain install stable --profile minimal --component rustfmt,clippy
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            desktop/target
+          key: desktop-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('desktop/Cargo.lock') }}
+      - run: npm ci --ignore-scripts
+      - run: npm run build
+      - run: cargo +stable fmt --check
+      - run: cargo +stable clippy --locked --all-targets -- -D warnings
+      - run: cargo +stable test --locked
+      - if: github.event_name == 'workflow_dispatch'
+        run: cargo install cargo-audit --locked
+      - if: github.event_name == 'workflow_dispatch'
+        run: cargo audit
+      - if: github.event_name == 'workflow_dispatch'
+        run: cargo install tauri-cli --version 2.12.4 --locked
+      - if: github.event_name == 'workflow_dispatch'
+        run: cargo tauri build --bundles ${{ matrix.bundle }}
+      - if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: development-unsigned-${{ runner.os }}-${{ runner.arch }}
+          path: |
+            desktop/target/release/bundle/**/*.dmg
+            desktop/target/release/bundle/**/*.exe
+          if-no-files-found: error
+          retention-days: 3

@@ -64,6 +64,7 @@ impl Device {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum DeviceState {
+    Queued,
     Stopped,
     Starting,
     Ready,
