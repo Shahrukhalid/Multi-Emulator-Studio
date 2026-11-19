@@ -4,6 +4,7 @@ import base64
 import json
 import os
 import pathlib
+import statistics
 import subprocess
 import tempfile
 import time
@@ -79,6 +80,24 @@ def main():
             call("navigate", id=device_id, key="home")
             call("navigate", id=device_id, key="volume_up")
             call("navigate", id=device_id, key="volume_down")
+        # Measure a bounded, alternating capture workload on the disposable devices.
+        # This is CLI capture latency, not native video or displayed FPS.
+        samples = {device_id: [] for device_id in ids}
+        sizes = {device_id: [] for device_id in ids}
+        for _ in range(5):
+            for device_id in ids:
+                begin = time.monotonic()
+                frame = call("screen", id=device_id)
+                image = base64.b64decode(frame["png_base64"], validate=True)
+                assert image.startswith(b"\x89PNG\r\n\x1a\n")
+                samples[device_id].append((time.monotonic() - begin) * 1000)
+                sizes[device_id].append(len(image))
+        print("CAPTURE_METRICS", json.dumps({device_id: {
+            "samples": len(samples[device_id]),
+            "median_cli_ms": round(statistics.median(samples[device_id]), 1),
+            "max_cli_ms": round(max(samples[device_id]), 1),
+            "median_png_bytes": statistics.median(sizes[device_id]),
+        } for device_id in ids}), flush=True)
         print("ADDRESSES",[s["addresses"] for s in statuses],flush=True)
         call("install_apk",id=ids[0],path=str(apk))
         assert guest(ids[0],ports[0],"shell","pm","list","packages",PACKAGE) == "package:" + PACKAGE

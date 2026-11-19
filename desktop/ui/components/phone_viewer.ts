@@ -1,9 +1,13 @@
 import { IApiClient } from '../api.js';
 import { Device, GoogleApps, NavigationKey, TouchInput } from '../types.js';
+import { FrameScheduler, FrameMetrics } from '../frame_scheduler.js';
 
 export class PhoneViewer {
   // One bounded capture at a time across the entire local workspace.
-  private static captureActive = false;
+  private static scheduler = new FrameScheduler();
+  private static nextPanel = 0;
+  private readonly panelId = String(++PhoneViewer.nextPanel);
+  private readonly metrics = new FrameMetrics();
   readonly element = document.createElement('div');
   private closed = false;
   private timer: number | null = null;
@@ -18,7 +22,7 @@ export class PhoneViewer {
   private checkedApps = false;
   private apps: GoogleApps | null = null;
   private start: { x: number; y: number; width: number; height: number } | null = null;
-  private visibilityChanged = () => this.schedule(0);
+  private visibilityChanged = () => { this.metrics.reset(); this.schedule(0); };
 
   constructor(private api: IApiClient, private device: Device, onClose: () => void) {
     this.element.className = 'phone-panel';
@@ -33,7 +37,7 @@ export class PhoneViewer {
         <button data-key="volume_down" disabled>Volume −</button>
         <button data-key="volume_up" disabled>Volume +</button>
         <button data-key="power" disabled>Power</button>
-      </div><button class="phone-app-check" disabled>Check Play Store &amp; YouTube</button><button class="phone-app-check phone-youtube-store" hidden disabled>Get YouTube from Play Store</button><p class="phone-app-status" role="status"></p><p class="phone-viewer-note" role="status">Local screen refresh · click to tap, drag to swipe</p>
+      </div><button class="phone-app-check" disabled>Check Play Store &amp; YouTube</button><button class="phone-app-check phone-youtube-store" hidden disabled>Get YouTube from Play Store</button><p class="phone-app-status" role="status"></p><p class="phone-viewer-note" role="status">Local screen refresh · click to tap, drag to swipe</p><p class="phone-frame-metrics" aria-label="Screen refresh performance">Waiting for frames</p>
     </section>`;
     this.element.querySelector('.phone-title')!.textContent = device.spec.name;
     this.element.querySelector('.phone-close')!.addEventListener('click', onClose);
@@ -67,12 +71,14 @@ export class PhoneViewer {
     document.addEventListener('visibilitychange', this.visibilityChanged);
     this.observer = new IntersectionObserver(entries => {
       this.visible = entries.some(entry => entry.isIntersecting);
+      if (!this.visible) this.metrics.reset();
       this.schedule(0);
     });
     this.observer.observe(this.element);
   }
   dispose(): void {
     this.closed = true;
+    PhoneViewer.scheduler.cancel(this.panelId);
     this.observer?.disconnect();
     if (this.frameUrl) URL.revokeObjectURL(this.frameUrl);
     document.removeEventListener('visibilitychange', this.visibilityChanged);
@@ -82,7 +88,10 @@ export class PhoneViewer {
   private schedule(delay: number): void {
     if (this.timer !== null) window.clearTimeout(this.timer);
     this.timer = null;
-    if (this.closed || this.terminal || !this.visible || document.hidden || this.busy || this.capturing) return;
+    if (this.closed || this.terminal || !this.visible || document.hidden || this.busy || this.capturing) {
+      PhoneViewer.scheduler.cancel(this.panelId);
+      return;
+    }
     this.timer = window.setTimeout(() => { this.timer = null; void this.refresh(); }, delay);
   }
 
@@ -128,15 +137,18 @@ export class PhoneViewer {
   }
 
   private async refresh(): Promise<void> {
-    if (this.closed || this.terminal || !this.visible || this.capturing || this.busy || document.hidden) return;
-    if (PhoneViewer.captureActive) { this.schedule(100); return; }
-    PhoneViewer.captureActive = true;
+    if (this.closed || this.terminal || !this.visible || this.capturing || this.busy || document.hidden) {
+      PhoneViewer.scheduler.cancel(this.panelId);
+      return;
+    }
+    if (!PhoneViewer.scheduler.acquire(this.panelId)) { this.schedule(40); return; }
     this.capturing = true;
+    const started = performance.now();
     const status = this.element.querySelector('.phone-status')!;
     const image = this.element.querySelector('.phone-frame') as HTMLImageElement;
     try {
       const bytes = await this.api.screenPng(this.device.id);
-      if (this.closed) return;
+      if (this.closed || !this.visible || document.hidden) return;
       if (!(bytes instanceof ArrayBuffer) || bytes.byteLength < 24 || bytes.byteLength > 16 * 1024 * 1024) throw new Error('Invalid screen response');
       const header = new DataView(bytes);
       const frame = { width: header.getUint32(16), height: header.getUint32(20) };
@@ -145,7 +157,7 @@ export class PhoneViewer {
         const decoded = new Image();
         decoded.src = src;
         await decoded.decode();
-        if (this.closed) { URL.revokeObjectURL(src); return; }
+        if (this.closed || !this.visible || document.hidden) { URL.revokeObjectURL(src); return; }
         if (decoded.naturalWidth !== frame.width || decoded.naturalHeight !== frame.height) throw new Error('Invalid frame dimensions');
         image.src = src;
         if (this.frameUrl) URL.revokeObjectURL(this.frameUrl);
@@ -158,9 +170,15 @@ export class PhoneViewer {
       this.failures = 0;
       image.hidden = false;
       status.textContent = '';
+      const now = performance.now();
+      this.metrics.record(now, now - started, bytes.byteLength);
+      const stats = this.metrics.snapshot();
+      this.element.querySelector('.phone-frame-metrics')!.textContent = `${stats.fps === null ? 'Measuring' : stats.fps.toFixed(1) + ' frames/s'} · ${Math.round(stats.averageMs)} ms capture + decode · ${Math.round(stats.averageBytes / 1024)} KiB/frame`;
     } catch (err: unknown) {
       if (this.closed) return;
       this.failures += 1;
+      this.metrics.reset();
+      this.element.querySelector('.phone-frame-metrics')!.textContent = 'Refresh interrupted';
       this.frame = null;
       this.start = null;
       this.updateControls();
@@ -178,14 +196,14 @@ export class PhoneViewer {
         return;
       }
     } finally {
-      PhoneViewer.captureActive = false;
+      PhoneViewer.scheduler.release(this.panelId);
       this.capturing = false;
       this.updateControls();
       if (this.frame && !this.checkedApps && !this.closed && !this.busy) {
         this.checkedApps = true;
         void this.checkApps();
       }
-      this.schedule(this.failures ? Math.min(4000, 500 * 2 ** Math.min(this.failures, 3)) : 250);
+      this.schedule(this.failures ? Math.min(4000, 500 * 2 ** Math.min(this.failures, 3)) : 100);
     }
   }
 }

@@ -114,3 +114,9 @@ No production merge or release until the applicable gates are verified. A CI-gen
 - Native desktop screen capture uses validated bounded PNG bytes over binary IPC instead of Base64 JSON, with object URL cleanup and off-screen polling suspension. The CLI retains its JSON screen contract. This remains screenshot refresh, not encoded video streaming or a measured FPS claim.
 - Verify YouTube package presence and system-app status independently. If missing, a user-initiated button opens its official Play Store listing inside the selected managed guest. No unofficial APK, sign-in automation, or silent installation.
 - Require successful real-host tests for Play Store, preinstalled YouTube and display performance before production release.
+
+## M4.5 — display performance measurement and scheduling (first increment)
+
+- A FIFO scheduler allocates the single capture slot to visible panels fairly; hidden and closed waiting panels relinquish their queue position. In-flight captures still release their own slot. Successful refreshes now request a new frame after 100 ms, subject to capture duration and contention.
+- Each phone panel reports observed successful decoded frames per second, capture-plus-decode latency and average PNG transfer size. These are measured values, not a promised video frame rate. The display still uses PNG refresh rather than a native encoded video stream.
+- The optional real-host smoke test captures five samples per disposable device in alternating order and reports median/max CLI capture round-trip latency and image size. Native video streaming, hardware decoder support, real macOS runtime checks and measured performance remain pending.
