@@ -94,6 +94,17 @@ export class App {
       '',
       '',
       {
+        onManagedStart: () => this.api.beginManagedSetup(),
+        onManagedStatus: () => this.api.managedSetupStatus(),
+        onManagedAnswer: yes => this.api.managedSetupAnswer(yes),
+        onManagedCancel: () => this.api.cancelManagedSetup(),
+        onManagedConnect: async sdkRoot => {
+          await this.api.connect(this.dataDir, sdkRoot);
+          this.isConnected = true;
+          await this.refreshAll();
+          this.startHealthPolling();
+          this.switchTab(this.preflight.ready ? 'devices' : 'settings');
+        },
         onThemeChange: (theme) => this.applyTheme(theme),
         onDataDirChange: async (path, sdkRoot) => {
           try {

@@ -348,7 +348,7 @@ impl Sdk {
     }
     pub fn hardware_profiles(&self) -> Result<Vec<String>> {
         let text = run(
-            Command::new(&self.avdmanager)
+            crate::managed_sdk::sdk_command(&self.root, &self.avdmanager)
                 .env("ANDROID_HOME", &self.root)
                 .env("ANDROID_SDK_ROOT", &self.root)
                 .args(["list", "device", "-c"]),
@@ -377,7 +377,7 @@ pub fn install_runtime(root: &Path) -> Result<Sdk> {
     };
     let image = format!("system-images;android-34;google_apis_playstore;{abi}");
     run(
-        Command::new(manager)
+        crate::managed_sdk::sdk_command(&root, &manager)
             .env("ANDROID_HOME", &root)
             .env("ANDROID_SDK_ROOT", &root)
             .args(["--install", "platform-tools", "emulator", &image]),
@@ -405,7 +405,7 @@ pub fn install_google_play_image(sdk: &Sdk) -> Result<()> {
         return Ok(());
     }
     run(
-        Command::new(&sdk.sdkmanager)
+        crate::managed_sdk::sdk_command(&sdk.root, &sdk.sdkmanager)
             .env("ANDROID_HOME", &sdk.root)
             .env("ANDROID_SDK_ROOT", &sdk.root)
             .args(["--install", &image]),
@@ -526,7 +526,7 @@ impl Android {
         &self.sdk
     }
     fn command(&self, path: &Path) -> Command {
-        let mut cmd = Command::new(path);
+        let mut cmd = crate::managed_sdk::sdk_command(&self.sdk.root, path);
         cmd.env("ANDROID_HOME", &self.sdk.root)
             .env("ANDROID_SDK_ROOT", &self.sdk.root)
             .env("ANDROID_AVD_HOME", &self.home)

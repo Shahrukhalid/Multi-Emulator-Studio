@@ -120,3 +120,9 @@ No production merge or release until the applicable gates are verified. A CI-gen
 - A FIFO scheduler allocates the single capture slot to visible panels fairly; hidden and closed waiting panels relinquish their queue position. In-flight captures still release their own slot. Successful refreshes now request a new frame after 100 ms, subject to capture duration and contention.
 - Each phone panel reports observed successful decoded frames per second, capture-plus-decode latency and average PNG transfer size. These are measured values, not a promised video frame rate. The display still uses PNG refresh rather than a native encoded video stream.
 - The optional real-host smoke test captures five samples per disposable device in alternating order and reports median/max CLI capture round-trip latency and image size. Native video streaming, hardware decoder support, real macOS runtime checks and measured performance remain pending.
+
+## M4.6 — managed first-run setup
+
+- Add opt-in Quick setup for new users. Download official host-specific Android command-line tools (published SHA-256 pin), and Temurin Java from official metadata with the published archive checksum, into private application data. Verify downloads before extraction; use the official SDK manager to install platform tools, emulator and the Google Play Android 14 image. No separate Android Studio installation, silent license acceptance or SDK redistribution.
+- Show official installer output and require a separate explicit user response to each license prompt. Keep legacy profiles on their existing SDK. Report package validation independently from emulator compatibility; an installed image does not prove successful boot or YouTube presence.
+- Clean-machine download, license interactions, Windows setup, macOS native emulator launch, actual Play Store/YouTube checks and encoded video streaming are not yet verified. Production release remains blocked.

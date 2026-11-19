@@ -1,6 +1,11 @@
-import { HostInfo, SdkInfo, NetworkReport } from '../types.js';
+import { HostInfo, SdkInfo, NetworkReport, SetupStatus } from '../types.js';
 
 export interface SettingsCallbacks {
+  onManagedStart: () => Promise<string>;
+  onManagedStatus: () => Promise<SetupStatus>;
+  onManagedAnswer: (yes: boolean) => Promise<void>;
+  onManagedCancel: () => Promise<void>;
+  onManagedConnect: (sdkRoot: string) => Promise<void>;
   onThemeChange: (theme: 'system' | 'dark' | 'light') => void;
   onDataDirChange: (path: string, sdkRoot?: string | null) => Promise<void>;
   onInstallRuntime: (sdkRoot: string) => Promise<void>;
@@ -27,6 +32,8 @@ export class SettingsComponent {
   private connected = false;
   private installing = false;
   private installMessage = '';
+  private managedMessage = '';
+  private managedLog = '';
 
   constructor(
     host: HostInfo | null,
@@ -98,6 +105,17 @@ export class SettingsComponent {
           <p class="view-subtitle">Manage application appearance, Android SDK runtime setup, and advanced options.</p>
         </div>
       </div>
+
+      ${!this.connected ? `<div class="settings-card">
+        <h3 class="settings-card-title">Quick setup — Android runtime</h3>
+        <p class="form-helper-text">No Android Studio or Java installation required. Download official Android tools, a private Java runtime and Android 14 Google Play image once. Internet and at least 12 GB free space required.</p>
+        <p class="form-helper-text">Review Google's Android SDK terms at developer.android.com/studio/terms. The package installer will show any additional required license prompts below.</p>
+        <label><input id="managed-consent" type="checkbox" ${this.installing ? 'disabled' : ''}> I have reviewed and agree to the Android SDK terms for permitted use.</label>
+        <div><button class="nav-item" id="managed-start" disabled>Set up Android automatically</button></div>
+        <p id="managed-result" role="status" class="form-helper-text"></p>
+        <pre id="managed-output" hidden tabindex="0" style="max-height:260px;overflow:auto;white-space:pre-wrap;"></pre>
+        <div id="managed-actions" hidden><button id="managed-yes" class="nav-item" disabled>Accept displayed license / continue</button><button id="managed-no" class="nav-item" disabled>Decline</button><button id="managed-cancel" class="nav-item">Cancel</button></div>
+      </div>` : ''}
 
       <!-- Section 1: Appearance & Storage -->
       <div class="settings-card">
@@ -198,7 +216,7 @@ export class SettingsComponent {
         <div style="margin-top: 16px; padding: 14px; background: var(--bg-surface-subtle); border-radius: var(--radius-sm); border: 1px solid var(--border-subtle); font-size: 12px; line-height: 1.6;">
           <div style="font-weight: 600; margin-bottom: 4px;">Android SDK License Agreement:</div>
           <p style="color: var(--text-secondary); margin-bottom: 8px;">
-            In accordance with Google terms of service, Android emulator images and development binaries cannot be redistributed without explicit license acceptance.
+            Google's SDK terms restrict redistribution. The automatic setup above downloads directly from official publishers. Advanced users may connect an existing installation instead.
           </p>
           <p style="color: var(--text-secondary);">
             Install the official Android SDK command-line tools and a supported Java runtime first. Open Android Studio's SDK Manager, install Android Emulator, Android SDK Platform-Tools, and an Android system image matching your computer's CPU (ARM64 on Apple Silicon or x86_64 on supported Intel/AMD PCs). Review the license terms personally. If using command-line tools, review the licenses with:
@@ -293,6 +311,54 @@ export class SettingsComponent {
     });
 
     const confirm = this.element.querySelector('#runtime-license-confirm') as HTMLInputElement;
+    const managedStart = this.element.querySelector<HTMLButtonElement>('#managed-start');
+    const consent = this.element.querySelector<HTMLInputElement>('#managed-consent');
+    const managedResult = this.element.querySelector('#managed-result');
+    if (managedResult) managedResult.textContent = this.managedMessage;
+    const previousOutput = this.element.querySelector<HTMLPreElement>('#managed-output');
+    if (previousOutput && this.managedLog) { previousOutput.textContent = this.managedLog; previousOutput.hidden = false; }
+    consent?.addEventListener('change', () => { if (managedStart) managedStart.disabled = !consent.checked || this.installing; });
+    managedStart?.addEventListener('click', async () => {
+      if (this.installing || !consent?.checked) return;
+      this.installing = true;
+      this.managedLog = '';
+      managedStart.disabled = true; consent.disabled = true;
+      const output = this.element.querySelector<HTMLPreElement>('#managed-output')!;
+      const actions = this.element.querySelector<HTMLElement>('#managed-actions')!;
+      const yes = this.element.querySelector<HTMLButtonElement>('#managed-yes')!;
+      const no = this.element.querySelector<HTMLButtonElement>('#managed-no')!;
+      const cancel = this.element.querySelector<HTMLButtonElement>('#managed-cancel')!;
+      let cancelled = false;
+      const answer = async (accept: boolean) => {
+        yes.disabled = no.disabled = true;
+        try { await this.callbacks.onManagedAnswer(accept); }
+        catch (error) { if (managedResult) managedResult.textContent = String(error); }
+      };
+      yes.onclick = () => void answer(true); no.onclick = () => void answer(false);
+      cancel.onclick = async () => { cancelled = true; await this.callbacks.onManagedCancel().catch(() => {}); };
+      try {
+        if (managedResult) managedResult.textContent = 'Downloading and verifying official tools and private Java…';
+        const sdk = await this.callbacks.onManagedStart();
+        output.hidden = false; actions.hidden = false;
+        if (managedResult) managedResult.textContent = 'Installing Android packages. Read and respond to each official license prompt.';
+        while (!cancelled) {
+          const state = await this.callbacks.onManagedStatus();
+          if (output.textContent !== state.output) { this.managedLog = state.output; output.textContent = state.output; output.scrollTop = output.scrollHeight; }
+          yes.disabled = no.disabled = !state.awaiting_answer;
+          if (state.done) {
+            if (!state.success) throw new Error('Official package setup did not finish. Review the installer output and retry.');
+            this.managedMessage = 'Official Android packages installed. Checking emulator compatibility…';
+            await this.callbacks.onManagedConnect(sdk);
+            break;
+          }
+          await new Promise(resolve => window.setTimeout(resolve, 1000));
+        }
+        if (cancelled) this.managedMessage = 'Setup cancelled. Open Quick setup to retry.';
+      } catch (error: unknown) {
+        this.managedMessage = 'Setup failed: ' + ((error as { message?: string }).message || String(error));
+        await this.callbacks.onManagedCancel().catch(() => {});
+      } finally { this.installing = false; this.render(); }
+    });
     const install = this.element.querySelector('#btn-install-runtime') as HTMLButtonElement;
     const connect = this.element.querySelector('#btn-connect-sdk') as HTMLButtonElement;
     const result = this.element.querySelector('#runtime-install-result') as HTMLElement;

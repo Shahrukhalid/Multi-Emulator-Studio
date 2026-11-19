@@ -14,6 +14,110 @@ use tauri_plugin_dialog::DialogExt;
 type Shared = Arc<Mutex<Option<Controller>>>;
 type HealthCache = Arc<Mutex<Option<Result<serde_json::Value, ApiError>>>>;
 static IMAGE_INSTALL: Mutex<()> = Mutex::new(());
+static MANAGED_SETUP: Mutex<Option<(PathBuf, multi_emulator_core::managed_sdk::SetupSession)>> =
+    Mutex::new(None);
+
+fn setup_error(message: &str) -> ApiError {
+    ApiError {
+        code: "conflict",
+        message: message.into(),
+    }
+}
+
+#[tauri::command]
+async fn begin_managed_setup(
+    app: tauri::AppHandle,
+    state: State<'_, Shared>,
+    reviewed: bool,
+) -> Result<PathBuf, ApiError> {
+    if !reviewed {
+        return Err(setup_error("Review Google's SDK terms before downloading"));
+    }
+    let data = app
+        .path()
+        .app_local_data_dir()
+        .map_err(|e| setup_error(&e.to_string()))?;
+    let shared = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut setup = MANAGED_SETUP
+            .try_lock()
+            .map_err(|_| setup_error("Android setup is already running"))?;
+        if setup.is_some() {
+            return Err(setup_error("Android setup is already running"));
+        }
+        if shared
+            .lock()
+            .map_err(|_| setup_error("Controller unavailable"))?
+            .is_some()
+        {
+            return Err(setup_error(
+                "Existing SDK is connected; its profiles will not be migrated",
+            ));
+        }
+        if data.join("metadata.db").is_file() {
+            let store = multi_emulator_core::storage::Store::open(&data.join("metadata.db")).map_err(ApiError::from)?;
+            if !store.list().map_err(ApiError::from)?.is_empty() {
+                return Err(setup_error("Existing virtual devices require their original SDK. Reconnect it instead of replacing its runtime."));
+            }
+        }
+        let root = multi_emulator_core::managed_sdk::prepare(&data).map_err(ApiError::from)?;
+        let session =
+            multi_emulator_core::managed_sdk::SetupSession::start(&root).map_err(ApiError::from)?;
+        *setup = Some((root.clone(), session));
+        Ok(root)
+    })
+    .await
+    .map_err(|e| setup_error(&e.to_string()))?
+}
+
+#[tauri::command]
+fn managed_setup_status() -> Result<multi_emulator_core::managed_sdk::SetupStatus, ApiError> {
+    let mut setup = MANAGED_SETUP
+        .try_lock()
+        .map_err(|_| setup_error("Android setup is busy"))?;
+    let (root, session) = setup
+        .as_mut()
+        .ok_or_else(|| setup_error("No active Android setup"))?;
+    let mut status = session.status().map_err(ApiError::from)?;
+    if status.done && status.success {
+        status.success = multi_emulator_core::android::Sdk::detect(Some(root.clone()))
+            .and_then(|sdk| sdk.images())
+            .is_ok_and(|images| {
+                images
+                    .iter()
+                    .any(|image| image.contains(";android-34;google_apis_playstore;"))
+            });
+        if !status.success {
+            status.output.push_str(
+                "\nRequired official Android packages were not verified. Check licenses and retry.",
+            );
+        }
+    }
+    if status.done {
+        *setup = None;
+    }
+    Ok(status)
+}
+
+#[tauri::command]
+fn managed_setup_answer(yes: bool) -> Result<(), ApiError> {
+    MANAGED_SETUP
+        .try_lock()
+        .map_err(|_| setup_error("Android setup is busy"))?
+        .as_mut()
+        .ok_or_else(|| setup_error("No active Android setup"))?
+        .1
+        .answer(yes)
+        .map_err(ApiError::from)
+}
+
+#[tauri::command]
+fn cancel_managed_setup() -> Result<(), ApiError> {
+    *MANAGED_SETUP
+        .try_lock()
+        .map_err(|_| setup_error("Initial download is still running"))? = None;
+    Ok(())
+}
 
 #[tauri::command]
 fn health(cache: State<'_, HealthCache>) -> Result<serde_json::Value, ApiError> {
@@ -35,6 +139,12 @@ async fn connect(
 ) -> Result<(), ApiError> {
     let s = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
+        let setup = MANAGED_SETUP
+            .try_lock()
+            .map_err(|_| setup_error("Wait for Android setup to finish"))?;
+        if setup.is_some() {
+            return Err(setup_error("Wait for Android setup to finish"));
+        }
         let mut guard = s.lock().map_err(|_| ApiError {
             code: "internal",
             message: "controller lock poisoned".into(),
@@ -61,6 +171,12 @@ async fn install_android_runtime(
 ) -> Result<(), ApiError> {
     let s = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
+        let setup = MANAGED_SETUP
+            .try_lock()
+            .map_err(|_| setup_error("Wait for managed Android setup"))?;
+        if setup.is_some() {
+            return Err(setup_error("Wait for managed Android setup"));
+        }
         let guard = s.lock().map_err(|_| ApiError {
             code: "internal",
             message: "controller lock poisoned".into(),
@@ -258,6 +374,10 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             connect,
+            begin_managed_setup,
+            managed_setup_status,
+            managed_setup_answer,
+            cancel_managed_setup,
             install_android_runtime,
             install_google_play,
             screen_png,

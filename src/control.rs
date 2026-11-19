@@ -92,7 +92,19 @@ impl Controller {
         std::fs::create_dir_all(root)?;
         let previous =
             crate::storage::Store::open(&root.join("metadata.db"))?.config("sdk_root")?;
-        let sdk = Sdk::detect(sdk_root.or_else(|| previous.map(PathBuf::from)))?;
+        let managed = crate::managed_sdk::managed_root(root);
+        let sdk = Sdk::detect(
+            sdk_root
+                .or_else(|| previous.map(PathBuf::from))
+                .or_else(|| {
+                    let sdk = Sdk::detect(Some(managed.clone())).ok()?;
+                    sdk.images()
+                        .ok()?
+                        .iter()
+                        .any(|image| image.contains(";google_apis_playstore;"))
+                        .then_some(managed)
+                }),
+        )?;
         let manager = Manager::open(root, Android::new(sdk.clone(), root.join("avds"))?)?;
         manager.set_config("sdk_root", &sdk.root.to_string_lossy())?;
         Ok(Self {

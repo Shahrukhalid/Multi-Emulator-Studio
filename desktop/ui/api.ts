@@ -5,7 +5,7 @@ import {
   Status,
   HostInfo,
   SdkInfo,
-  NetworkReport
+  NetworkReport, SetupStatus
 } from './types.js';
 
 declare const window: Window & {
@@ -24,6 +24,10 @@ export interface IApiClient {
   connect(root: string, sdkRoot?: string | null): Promise<void>;
   installRuntime(sdkRoot: string): Promise<void>;
   installGooglePlay(): Promise<void>;
+  beginManagedSetup(): Promise<string>;
+  managedSetupStatus(): Promise<SetupStatus>;
+  managedSetupAnswer(yes: boolean): Promise<void>;
+  cancelManagedSetup(): Promise<void>;
   screenPng(id: string): Promise<ArrayBuffer>;
   pickApk(): Promise<string | null>;
   pickSdkDirectory(): Promise<string | null>;
@@ -73,6 +77,10 @@ class TauriApiClient implements IApiClient {
     return this.invoke<void>('install_android_runtime', { sdkRoot });
   }
   installGooglePlay(): Promise<void> { return this.invoke<void>('install_google_play'); }
+  beginManagedSetup(): Promise<string> { return this.invoke<string>('begin_managed_setup', { reviewed: true }); }
+  managedSetupStatus(): Promise<SetupStatus> { return this.invoke<SetupStatus>('managed_setup_status'); }
+  managedSetupAnswer(yes: boolean): Promise<void> { return this.invoke<void>('managed_setup_answer', { yes }); }
+  cancelManagedSetup(): Promise<void> { return this.invoke<void>('cancel_managed_setup'); }
   screenPng(id: string): Promise<ArrayBuffer> { return this.invoke<ArrayBuffer>('screen_png', { id }); }
 
   pickApk(): Promise<string | null> {
@@ -211,6 +219,10 @@ class BrowserPreviewClient implements IApiClient {
     throw new Error('Runtime installation requires the native desktop app.');
   }
   async installGooglePlay(): Promise<void> { throw new Error('Image installation requires the native app.'); }
+  async beginManagedSetup(): Promise<string> { throw new Error('Setup requires the native app.'); }
+  async managedSetupStatus(): Promise<SetupStatus> { throw new Error('Setup requires the native app.'); }
+  async managedSetupAnswer(_yes: boolean): Promise<void> { throw new Error('Setup requires the native app.'); }
+  async cancelManagedSetup(): Promise<void> { throw new Error('Setup requires the native app.'); }
   async screenPng(_id: string): Promise<ArrayBuffer> { throw new Error('Screen capture requires the native app.'); }
 
   async pickApk(): Promise<string | null> {

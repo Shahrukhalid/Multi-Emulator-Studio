@@ -3,6 +3,7 @@ pub mod budget;
 pub mod control;
 pub mod error;
 pub mod host;
+pub mod managed_sdk;
 pub mod manager;
 pub mod model;
 pub mod network;
