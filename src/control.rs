@@ -19,6 +19,7 @@ pub enum Request {
     HardwareProfiles,
     Acceleration,
     EmulatorVersion,
+    RuntimePreflight,
     List,
     Tick,
     Network,
@@ -67,6 +68,7 @@ impl Controller {
             Request::HardwareProfiles => json!(self.sdk.hardware_profiles()?),
             Request::Acceleration => json!(self.sdk.acceleration()?),
             Request::EmulatorVersion => json!(self.sdk.version()?),
+            Request::RuntimePreflight => json!(self.sdk.preflight()),
             Request::List => json!(self.manager.list()?),
             Request::Tick => json!(self.manager.tick()?),
             Request::Network => {

@@ -1,5 +1,5 @@
 import { getApiClient, IApiClient } from './api.js';
-import { Device, Status, HostInfo, SdkInfo, NetworkReport, DeviceSpec, DevicePreset } from './types.js';
+import { Device, Status, HostInfo, SdkInfo, NetworkReport, DeviceSpec, DevicePreset, RuntimePreflight } from './types.js';
 import { HeaderComponent, MainNavTab } from './components/header.js';
 import { WelcomeComponent } from './components/welcome.js';
 import { DeviceListComponent } from './components/device_list.js';
@@ -32,6 +32,7 @@ export class App {
   private hardwareProfiles: string[] = [];
   private networkReport: NetworkReport | null = null;
   private accelerationText = '';
+  private preflight: RuntimePreflight = { ready: false, version: '', acceleration: '', diagnostic: 'Runtime not checked' };
   private dataDir = '';
   private sdkDir = '';
   private isConnected = false;
@@ -116,7 +117,8 @@ export class App {
             return;
           }
           await this.refreshSdkCatalog();
-          toast.show(this.sdk && this.images.length && this.hardwareProfiles.length ? 'SDK and compatible images detected' : 'SDK or compatible images still missing', this.sdk && this.images.length && this.hardwareProfiles.length ? 'success' : 'warning');
+          const ready = this.preflight.ready && !!this.images.length && !!this.hardwareProfiles.length;
+          toast.show(ready ? 'Runtime preflight passed; actual boot still unverified' : 'Runtime setup requires attention', ready ? 'success' : 'warning');
         },
         onFetchLogs: async () => {
           if (this.devices.length > 0) {
@@ -171,7 +173,7 @@ export class App {
       this.sdk = await this.api.getSdk().catch(() => null);
       this.images = await this.api.getImages().catch(() => []);
       this.hardwareProfiles = await this.api.getHardwareProfiles().catch(() => []);
-      this.accelerationText = await this.api.getAcceleration().catch(() => '');
+      await this.refreshRuntimePreflight();
       this.networkReport = await this.api.getNetworkReport().catch(() => null);
 
       await this.refreshDevices();
@@ -182,7 +184,8 @@ export class App {
         this.accelerationText,
         this.images.length,
         this.networkReport,
-        await this.api.dispatch<string>({ action: 'emulator_version' }).catch(() => '')
+        this.preflight.version,
+        this.preflight.diagnostic
       );
       this.settings.setConnection(this.dataDir, this.isConnected);
     } catch (err) {
@@ -206,15 +209,25 @@ export class App {
     this.sdk = await this.api.getSdk().catch(() => null);
     this.images = await this.api.getImages().catch(() => []);
     this.hardwareProfiles = await this.api.getHardwareProfiles().catch(() => []);
-    this.accelerationText = await this.api.getAcceleration().catch(() => '');
+    await this.refreshRuntimePreflight();
     this.settings.updateData(
       this.host,
       this.sdk,
       this.accelerationText,
       this.images.length,
       this.networkReport,
-      await this.api.dispatch<string>({ action: 'emulator_version' }).catch(() => '')
+      this.preflight.version,
+      this.preflight.diagnostic
     );
+  }
+
+  private async refreshRuntimePreflight(): Promise<void> {
+    try {
+      this.preflight = await this.api.dispatch<RuntimePreflight>({ action: 'runtime_preflight' });
+    } catch (err: unknown) {
+      this.preflight = { ready: false, version: '', acceleration: '', diagnostic: (err as { message?: string }).message || String(err) };
+    }
+    this.accelerationText = this.preflight.acceleration;
   }
 
   private startHealthPolling(): void {
@@ -364,6 +377,11 @@ export class App {
   private openWizard(initialPreset?: DevicePreset): void {
     if (!this.api.isPreview && (!this.isConnected || !this.images.length || !this.hardwareProfiles.length)) {
       toast.show('Connect the official Android SDK and install a compatible system image before creating a device.', 'warning');
+      this.switchTab('settings');
+      return;
+    }
+    if (!this.api.isPreview && !this.preflight.ready) {
+      toast.show('Android runtime preflight failed. Check Settings for details.', 'warning');
       this.switchTab('settings');
       return;
     }

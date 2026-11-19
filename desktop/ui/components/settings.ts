@@ -15,6 +15,7 @@ export class SettingsComponent {
   private sdk: SdkInfo | null;
   private accelerationText: string;
   private emulatorVersion = '';
+  private runtimeDiagnostic = '';
   private installedImagesCount: number;
   private networkReport: NetworkReport | null;
   private callbacks: SettingsCallbacks;
@@ -73,7 +74,8 @@ export class SettingsComponent {
     accelerationText: string,
     imagesCount: number,
     networkReport: NetworkReport | null,
-    emulatorVersion: string
+    emulatorVersion: string,
+    runtimeDiagnostic: string
   ): void {
     this.host = host;
     this.sdk = sdk;
@@ -81,6 +83,7 @@ export class SettingsComponent {
     this.installedImagesCount = imagesCount;
     this.networkReport = networkReport;
     this.emulatorVersion = emulatorVersion;
+    this.runtimeDiagnostic = runtimeDiagnostic;
     this.render();
   }
 
@@ -174,6 +177,7 @@ export class SettingsComponent {
             <div style="font-weight: 500; font-size: 13px;">Emulator Version</div>
             <div class="form-helper-text">${this.escapeHtml(this.emulatorVersion.split(/\r?\n/).find(line => line.trim()) || 'Version not verified')}</div>
             <div class="form-helper-text">A successful acceleration or version probe does not establish guest boot readiness.</div>
+            ${this.runtimeDiagnostic ? `<p class="form-helper-text">${this.escapeHtml(this.runtimeDiagnostic)}</p>` : ''}
           </div>
         </div>
 

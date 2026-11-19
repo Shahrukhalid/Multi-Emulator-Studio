@@ -120,6 +120,61 @@ pub struct Sdk {
     pub avdmanager: PathBuf,
     pub sdkmanager: PathBuf,
 }
+
+#[derive(Debug, Serialize)]
+pub struct RuntimePreflight {
+    pub ready: bool,
+    pub version: String,
+    pub acceleration: String,
+    pub diagnostic: String,
+}
+
+fn evaluate_preflight(
+    version: Result<String>,
+    acceleration: impl FnOnce() -> Result<String>,
+) -> RuntimePreflight {
+    let mut result = RuntimePreflight {
+        ready: false,
+        version: String::new(),
+        acceleration: String::new(),
+        diagnostic: String::new(),
+    };
+    match version {
+        Ok(text) if !text.trim().is_empty() => result.version = text,
+        Ok(_) => {
+            result.diagnostic = "The official emulator returned no version information.".into();
+            return result;
+        }
+        Err(err) => {
+            result.diagnostic = format!("Official emulator cannot start its version probe: {err}. Verify host compatibility in Android Studio before retrying.");
+            return result;
+        }
+    }
+    match acceleration() {
+        Ok(text) => {
+            result.ready = text.lines().any(|line| line.trim() == "0");
+            result.acceleration = text;
+            if !result.ready {
+                result.diagnostic = "Hardware virtualization is not available.".into();
+            }
+        }
+        Err(err) => result.diagnostic = format!("Hardware acceleration probe failed: {err}"),
+    }
+    result
+}
+
+#[cfg(test)]
+#[test]
+fn runtime_preflight_fails_closed() {
+    let failed = evaluate_preflight(
+        Err(Error::Runtime("native CPU incompatibility".into())),
+        || panic!("version failure must stop preflight"),
+    );
+    assert!(!failed.ready);
+    assert!(failed.diagnostic.contains("native CPU incompatibility"));
+    assert!(!evaluate_preflight(Ok("version".into()), || Ok("accel:\n1".into())).ready);
+    assert!(evaluate_preflight(Ok("version".into()), || Ok("accel:\n0".into())).ready);
+}
 impl Sdk {
     pub fn detect(root: Option<PathBuf>) -> Result<Self> {
         let root = root
@@ -198,6 +253,9 @@ impl Sdk {
     }
     pub fn version(&self) -> Result<String> {
         run(Command::new(&self.emulator).arg("-version"), None, SHORT)
+    }
+    pub fn preflight(&self) -> RuntimePreflight {
+        evaluate_preflight(self.version(), || self.acceleration())
     }
     pub fn hardware_profiles(&self) -> Result<Vec<String>> {
         let text = run(
@@ -564,11 +622,9 @@ impl Engine for Android {
                 "configured system image is missing".into(),
             ));
         }
-        let accel = self.sdk.acceleration()?;
-        if !accel.lines().any(|l| l.trim() == "0") {
-            return Err(Error::Unavailable(
-                "hardware acceleration unavailable".into(),
-            ));
+        let preflight = self.sdk.preflight();
+        if !preflight.ready {
+            return Err(Error::Unavailable(preflight.diagnostic));
         }
         if !self.avd_dir(d).join("config.ini").is_file() {
             return Err(Error::Unavailable("AVD missing".into()));

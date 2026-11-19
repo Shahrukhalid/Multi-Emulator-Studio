@@ -39,12 +39,11 @@ def main():
         return subprocess.check_output([*command,*args],text=True,timeout=20).strip()
     try:
         print("HOST",call("host"),flush=True)
-        print("EMULATOR VERSION",call("emulator_version"),flush=True)
         print("GRAPHICS MODE",args.graphics,flush=True)
-        acceleration = call("acceleration")
-        print("ACCELERATION",acceleration,flush=True)
-        if "0" not in [line.strip() for line in acceleration.splitlines()]:
-            raise RuntimeError("hardware virtualization preflight failed")
+        preflight = call("runtime_preflight")
+        print("RUNTIME PREFLIGHT", preflight, flush=True)
+        if not preflight["ready"]:
+            raise RuntimeError(preflight["diagnostic"])
         image=next((i for i in call("images") if "android-34" in i),None)
         if not image: raise RuntimeError("no Android 14 image installed")
         apk = build_fixture(sdk, root / "fixture")

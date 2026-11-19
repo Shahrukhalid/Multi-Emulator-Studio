@@ -20,8 +20,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             "{}",
             json!({"host":multi_emulator_core::host::detect(),"sdk":s,"images":s.images()?})
         );
-        println!("{}", s.acceleration()?);
-        println!("{}", s.version()?);
+        let report = s.preflight();
+        println!("{}", serde_json::to_string(&report)?);
+        if !report.ready {
+            return Err(report.diagnostic.into());
+        }
         return Ok(());
     }
     let mut c = Controller::open(&root, sdk)?;

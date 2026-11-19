@@ -54,6 +54,13 @@ export interface SdkInfo {
   sdkmanager: string;
 }
 
+export interface RuntimePreflight {
+  ready: boolean;
+  version: string;
+  acceleration: string;
+  diagnostic: string;
+}
+
 export interface AddressOverlap {
   address: string;
   devices: string[];
@@ -77,6 +84,7 @@ export type Request =
   | { action: 'hardware_profiles' }
   | { action: 'acceleration' }
   | { action: 'emulator_version' }
+  | { action: 'runtime_preflight' }
   | { action: 'list' }
   | { action: 'tick' }
   | { action: 'network' }

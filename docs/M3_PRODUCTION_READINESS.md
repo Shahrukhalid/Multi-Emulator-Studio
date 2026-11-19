@@ -59,3 +59,11 @@ Status: in progress; no production release authorized by these checks alone.
 - [ ] Review final changes, reconcile pending dependency updates, and ensure release notes reflect limitations.
 
 No production merge or release until the applicable gates are verified. A CI-generated unsigned development artifact is not a production installer.
+
+## Seventh increment — native runtime preflight
+
+- Consolidated M3.6 macOS and Windows core and desktop CI passed. Local M3.7 core tests (18/18), Clippy, frontend build, desktop Clippy and checksum unit test passed.
+- Confirmed the installed emulator launcher and its QEMU executable are native ARM64 Mach-O binaries on the Apple Silicon host. The official emulator version command itself still fails with SIGABRT/Qt NEON compatibility error. The root cause is not established; the failure occurs before any guest launches.
+- Add one structured, fail-closed version and acceleration preflight shared by the desktop, CLI and smoke test. Do not launch a guest when the version probe fails. Display the actual diagnostic rather than treating a detected SDK or successful acceleration as runtime readiness.
+- Next prerequisite: verify the official Android Emulator launches through Android Studio on a compatible physical macOS or Windows host using the supported SDK Manager installation. If the official emulator fails there, resolve that environment through official support before repeating the disposable smoke test. No host security changes, SDK replacement, or automatic retries were attempted.
+- Production release remains blocked by native execution and clean-install verification.
