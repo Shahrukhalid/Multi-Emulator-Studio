@@ -1,0 +1,14 @@
+/target/
+/desktop/target/
+/desktop/node_modules/
+/desktop/dist/
+*.db
+*.db-wal
+*.db-shm
+*.avd/
+*.apk
+*.log
+.env*
+*.p12
+*.keystore
+
