@@ -53,6 +53,33 @@ async fn connect(
     })?
 }
 #[tauri::command]
+async fn install_android_runtime(
+    sdk_root: PathBuf,
+    state: State<'_, Shared>,
+) -> Result<(), ApiError> {
+    let s = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let guard = s.lock().map_err(|_| ApiError {
+            code: "internal",
+            message: "controller lock poisoned".into(),
+        })?;
+        if guard.is_some() {
+            return Err(ApiError {
+                code: "conflict",
+                message: "Close the app before modifying an active SDK".into(),
+            });
+        }
+        multi_emulator_core::android::install_runtime(&sdk_root).map_err(ApiError::from)?;
+        Ok(())
+    })
+    .await
+    .map_err(|e| ApiError {
+        code: "internal",
+        message: e.to_string(),
+    })?
+}
+
+#[tauri::command]
 async fn dispatch(
     request: Request,
     state: State<'_, Shared>,
@@ -114,6 +141,7 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             connect,
+            install_android_runtime,
             dispatch,
             health,
             default_data_dir

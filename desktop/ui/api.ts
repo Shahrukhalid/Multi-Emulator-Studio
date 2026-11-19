@@ -22,6 +22,7 @@ export interface IApiClient {
 
   getDefaultDataDir(): Promise<string>;
   connect(root: string, sdkRoot?: string | null): Promise<void>;
+  installRuntime(sdkRoot: string): Promise<void>;
   dispatch<T>(request: Request): Promise<T>;
   health(): Promise<Status[]>;
 
@@ -62,6 +63,10 @@ class TauriApiClient implements IApiClient {
 
   connect(root: string, sdkRoot?: string | null): Promise<void> {
     return this.invoke<void>('connect', { root, sdkRoot: sdkRoot || null });
+  }
+
+  installRuntime(sdkRoot: string): Promise<void> {
+    return this.invoke<void>('install_android_runtime', { sdkRoot });
   }
 
   dispatch<T>(request: Request): Promise<T> {
@@ -186,6 +191,10 @@ class BrowserPreviewClient implements IApiClient {
 
   async connect(_root: string, _sdkRoot?: string | null): Promise<void> {
     throw new Error('Connecting an SDK requires the native desktop app.');
+  }
+
+  async installRuntime(_sdkRoot: string): Promise<void> {
+    throw new Error('Runtime installation requires the native desktop app.');
   }
 
   async dispatch<T>(request: Request): Promise<T> {

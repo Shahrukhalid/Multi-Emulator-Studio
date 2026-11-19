@@ -101,6 +101,14 @@ export class App {
             toast.show(`Connection failed: ${(err as { message?: string }).message || String(err)}`, 'error');
           }
         },
+        onInstallRuntime: async (sdkRoot) => {
+          await this.api.installRuntime(sdkRoot);
+          toast.show('Official Android runtime installed', 'success');
+          await this.api.connect(this.dataDir, sdkRoot);
+          this.isConnected = true;
+          await this.refreshAll();
+          this.startHealthPolling();
+        },
         onCheckSdk: async () => {
           if (!this.isConnected && !this.api.isPreview) {
             toast.show('Connect your Android SDK before checking installed tools.', 'warning');

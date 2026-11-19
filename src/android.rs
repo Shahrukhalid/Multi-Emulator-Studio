@@ -187,6 +187,47 @@ impl Sdk {
     }
 }
 
+/// Install only the fixed official runtime packages using an existing SDK manager.
+/// Licenses must already have been accepted interactively by the user.
+pub fn install_runtime(root: &Path) -> Result<Sdk> {
+    let root = root.canonicalize()?;
+    let batch = if cfg!(windows) { ".bat" } else { "" };
+    let manager = root.join(format!("cmdline-tools/latest/bin/sdkmanager{batch}"));
+    if !manager.is_file() {
+        return Err(Error::Unavailable(
+            "Install official Android SDK command-line tools first".into(),
+        ));
+    }
+    let abi = match std::env::consts::ARCH {
+        "aarch64" => "arm64-v8a",
+        "x86_64" => "x86_64",
+        _ => return Err(Error::Unavailable("unsupported CPU".into())),
+    };
+    let image = format!("system-images;android-34;google_apis;{abi}");
+    run(
+        Command::new(manager)
+            .env("ANDROID_HOME", &root)
+            .env("ANDROID_SDK_ROOT", &root)
+            .args(["--install", "platform-tools", "emulator", &image]),
+        None,
+        Duration::from_secs(1800),
+    )?;
+    let sdk = Sdk::detect(Some(root))?;
+    if !sdk.images()?.contains(&image) {
+        return Err(Error::Unavailable(
+            "requested system image was not installed".into(),
+        ));
+    }
+    Ok(sdk)
+}
+
+#[cfg(test)]
+#[test]
+fn runtime_install_requires_existing_sdkmanager() {
+    let dir = tempfile::tempdir().unwrap();
+    assert!(install_runtime(dir.path()).is_err());
+}
+
 fn parse_hardware_profiles(text: &str) -> Vec<String> {
     let mut profiles: Vec<_> = text
         .lines()

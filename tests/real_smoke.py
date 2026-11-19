@@ -70,6 +70,9 @@ def main():
         for device_id,port,marker in zip(ids,ports,("mes-alpha","mes-bravo")):
             assert guest(device_id,port,"shell","settings","get","system","mes_smoke_marker")==marker
             assert guest(device_id,port,"shell","run-as",PACKAGE,"cat","mes-smoke-marker")==marker
+        renamed=call("rename",id=ids[0],name="Smoke A Renamed")
+        assert renamed["id"] == ids[0]
+        assert guest(ids[0],ports[0],"shell","run-as",PACKAGE,"cat","mes-smoke-marker") == "mes-alpha"
         call("stop",id=ids[0])
         assert call("status",id=ids[1])["state"]=="ready"
         call("start",id=ids[0])
