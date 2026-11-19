@@ -2,6 +2,23 @@ use crate::{Error, Result};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum GraphicsMode {
+    #[default]
+    Auto,
+    Software,
+}
+
+impl GraphicsMode {
+    pub fn emulator_arg(self) -> &'static str {
+        match self {
+            Self::Auto => "auto",
+            Self::Software => "software",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct DeviceSpec {
     pub name: String,
@@ -13,6 +30,8 @@ pub struct DeviceSpec {
     pub height: u32,
     pub disk_mb: u32,
     pub locale: String,
+    #[serde(default)]
+    pub graphics_mode: GraphicsMode,
 }
 impl DeviceSpec {
     pub fn validate(&self) -> Result<()> {
@@ -55,6 +74,20 @@ fn rejects_ambiguous_sdk_identifiers() {
     spec.hardware_profile = "pixel_6".into();
     spec.image = "system-images;android-34;..;arm64-v8a".into();
     assert!(spec.validate().is_err());
+}
+
+#[cfg(test)]
+#[test]
+fn legacy_profiles_default_to_auto_graphics() {
+    let mut value = serde_json::to_value(sample()).unwrap();
+    value.as_object_mut().unwrap().remove("graphics_mode");
+    let spec: DeviceSpec = serde_json::from_value(value.clone()).unwrap();
+    assert_eq!(spec.graphics_mode, GraphicsMode::Auto);
+    value["graphics_mode"] = serde_json::json!("software");
+    let spec: DeviceSpec = serde_json::from_value(value.clone()).unwrap();
+    assert_eq!(spec.graphics_mode.emulator_arg(), "software");
+    value["graphics_mode"] = serde_json::json!("invalid");
+    assert!(serde_json::from_value::<DeviceSpec>(value).is_err());
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -110,5 +143,6 @@ pub fn sample() -> DeviceSpec {
         height: 1920,
         disk_mb: 4096,
         locale: "en-US".into(),
+        graphics_mode: GraphicsMode::Auto,
     }
 }

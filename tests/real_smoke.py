@@ -1,17 +1,21 @@
 """Opt-in actual host smoke test. Creates only disposable AVDs under a new directory."""
+import argparse
 import json
 import os
 import pathlib
 import subprocess
-import sys
 import tempfile
 import time
 from build_fixture import PACKAGE, build_fixture
 
 def main():
-    if len(sys.argv) != 2:
-        raise SystemExit("usage: python3 tests/real_smoke.py /path/to/SDK")
-    sdk = pathlib.Path(sys.argv[1]).resolve()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("sdk", type=pathlib.Path)
+    parser.add_argument("--graphics", choices=("auto", "software"), default="auto")
+    args = parser.parse_args()
+    if not __debug__:
+        raise SystemExit("Smoke assertions must be enabled; do not use python -O")
+    sdk = args.sdk.resolve()
     binary = pathlib.Path("target/debug/multi-emulator-core" + (".exe" if os.name == "nt" else "")).resolve()
     adb = sdk / "platform-tools" / ("adb.exe" if os.name == "nt" else "adb")
     env = dict(os.environ)
@@ -35,11 +39,16 @@ def main():
         return subprocess.check_output([*command,*args],text=True,timeout=20).strip()
     try:
         print("HOST",call("host"),flush=True)
-        print("ACCELERATION",call("acceleration"),flush=True)
+        print("EMULATOR VERSION",call("emulator_version"),flush=True)
+        print("GRAPHICS MODE",args.graphics,flush=True)
+        acceleration = call("acceleration")
+        print("ACCELERATION",acceleration,flush=True)
+        if "0" not in [line.strip() for line in acceleration.splitlines()]:
+            raise RuntimeError("hardware virtualization preflight failed")
         image=next((i for i in call("images") if "android-34" in i),None)
         if not image: raise RuntimeError("no Android 14 image installed")
         apk = build_fixture(sdk, root / "fixture")
-        spec=dict(name="Smoke A",image=image,hardware_profile="pixel_6",ram_mb=2048,cores=2,width=720,height=1280,disk_mb=2048,locale="en-US")
+        spec=dict(name="Smoke A",image=image,hardware_profile="pixel_6",ram_mb=2048,cores=2,width=720,height=1280,disk_mb=2048,locale="en-US",graphics_mode=args.graphics)
         for name in ("Smoke A","Smoke B"):
             spec["name"]=name
             d=call("create",spec=spec); ids.append(d["id"])
@@ -58,6 +67,8 @@ def main():
             time.sleep(5)
         else: raise RuntimeError("boot deadline exceeded")
         ports=[s["console_port"] for s in statuses]
+        for device_id,port in zip(ids,ports):
+            assert guest(device_id,port,"shell","getprop","sys.boot_completed") == "1"
         print("ADDRESSES",[s["addresses"] for s in statuses],flush=True)
         call("install_apk",id=ids[0],path=str(apk))
         assert guest(ids[0],ports[0],"shell","pm","list","packages",PACKAGE) == "package:" + PACKAGE

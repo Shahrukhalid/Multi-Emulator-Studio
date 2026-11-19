@@ -198,6 +198,14 @@ export class WizardComponent {
                       <input type="text" class="form-text-input" id="wiz-locale" value="en-US" />
                     </div>
                   </div>
+                  <div>
+                    <label class="form-helper-text" for="wiz-graphics">Graphics rendering</label>
+                    <select class="form-select-input" id="wiz-graphics">
+                      <option value="auto">Automatic (recommended)</option>
+                      <option value="software">Software (graphics compatibility)</option>
+                    </select>
+                    <span class="form-helper-text">Software rendering may be slower. Hardware virtualization is still required.</span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -269,7 +277,8 @@ export class WizardComponent {
         width: Number(wInput?.value || this.selectedPreset.width),
         height: Number(hInput?.value || this.selectedPreset.height),
         disk_mb: Number(diskInput?.value || 8192),
-        locale: localeInput?.value.trim() || 'en-US'
+        locale: localeInput?.value.trim() || 'en-US',
+        graphics_mode: (this.element.querySelector('#wiz-graphics') as HTMLSelectElement)?.value === 'software' ? 'software' : 'auto'
       };
 
       const validationErr = validateDeviceSpec(spec);

@@ -181,7 +181,8 @@ export class App {
         this.sdk,
         this.accelerationText,
         this.images.length,
-        this.networkReport
+        this.networkReport,
+        await this.api.dispatch<string>({ action: 'emulator_version' }).catch(() => '')
       );
       this.settings.setConnection(this.dataDir, this.isConnected);
     } catch (err) {
@@ -211,7 +212,8 @@ export class App {
       this.sdk,
       this.accelerationText,
       this.images.length,
-      this.networkReport
+      this.networkReport,
+      await this.api.dispatch<string>({ action: 'emulator_version' }).catch(() => '')
     );
   }
 

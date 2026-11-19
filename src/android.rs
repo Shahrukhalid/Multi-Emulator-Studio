@@ -29,11 +29,33 @@ fn log_tail(log: &Path, limit: u64) -> std::io::Result<String> {
 
 fn crash_diagnostic(log: &Path, exit: std::process::ExitStatus) -> String {
     let message = format!("emulator exited: {exit}; see local emulator log");
+    #[cfg(unix)]
+    let message = {
+        use std::os::unix::process::ExitStatusExt;
+        if exit.signal() == Some(libc::SIGILL) {
+            format!("{message}. Native emulator reported an illegal instruction. Check official emulator/host compatibility; GPU mode is not a proven fix.")
+        } else {
+            message
+        }
+    };
     let excerpt = log_tail(log, 4096);
     match excerpt {
         Ok(tail) if !tail.is_empty() => format!("{message}\n{tail}"),
         _ => message,
     }
+}
+
+#[cfg(all(test, unix))]
+#[test]
+fn illegal_instruction_diagnostic_does_not_claim_a_fix() {
+    use std::os::unix::process::ExitStatusExt;
+    let dir = tempfile::tempdir().unwrap();
+    let log = dir.path().join("emulator.log");
+    fs::write(&log, "startup log").unwrap();
+    let diagnostic = crash_diagnostic(&log, std::process::ExitStatus::from_raw(libc::SIGILL));
+    assert!(diagnostic.contains("illegal instruction"));
+    assert!(diagnostic.contains("not a proven fix"));
+    assert!(diagnostic.contains("startup log"));
 }
 
 /// No shell interpolation. Bounded process output is kept in temporary files.
@@ -173,6 +195,9 @@ impl Sdk {
             None,
             SHORT,
         )
+    }
+    pub fn version(&self) -> Result<String> {
+        run(Command::new(&self.emulator).arg("-version"), None, SHORT)
     }
     pub fn hardware_profiles(&self) -> Result<Vec<String>> {
         let text = run(
@@ -378,9 +403,12 @@ impl Android {
     }
     fn assert_idle(&mut self, d: &Device) -> Result<()> {
         if let Some(i) = self.active.get_mut(&d.id) {
-            if i.child.try_wait()?.is_none() {
-                return Err(Error::Conflict("device is active".into()));
-            }
+            let exit = i
+                .child
+                .try_wait()?
+                .ok_or_else(|| Error::Conflict("device is active".into()))?;
+            let diagnostic = crash_diagnostic(&self.log_path(d), exit);
+            self.crashed.insert(d.id, diagnostic);
         }
         self.active.remove(&d.id);
         // Never remove unknown/stale emulator locks automatically.
@@ -531,6 +559,9 @@ impl Engine for Android {
             });
         }
         self.check_disk(1024)?;
+        if !self.sdk.images()?.contains(&d.spec.image) {
+            return Err(Error::Unavailable("configured system image is missing".into()));
+        }
         let accel = self.sdk.acceleration()?;
         if !accel.lines().any(|l| l.trim() == "0") {
             return Err(Error::Unavailable(
@@ -552,6 +583,8 @@ impl Engine for Android {
             "-no-snapshot",
             "-accel",
             "on",
+            "-gpu",
+            d.spec.graphics_mode.emulator_arg(),
         ]);
         if std::env::var_os("MES_HEADLESS").as_deref() == Some(std::ffi::OsStr::new("1")) {
             launch.arg("-no-window");
@@ -630,11 +663,17 @@ impl Engine for Android {
             .unwrap_or(false);
         if !ready && should_timeout {
             self.stop(d)?;
-            self.crashed.insert(
-                d.id,
-                "emulator boot timed out; see local emulator log".into(),
-            );
-            return Err(Error::Timeout("emulator boot".into()));
+            let tail = log_tail(&self.log_path(d), 4096).unwrap_or_default();
+            let diagnostic = format!("emulator boot timed out; see local emulator log\n{tail}");
+            self.crashed.insert(d.id, diagnostic.clone());
+            return Ok(Status {
+                id: d.id,
+                state: DeviceState::Crashed,
+                pid: None,
+                console_port: None,
+                addresses: vec![],
+                diagnostic: Some(diagnostic),
+            });
         }
         let state = readiness_state(ever_ready, ready);
         if let Some(i) = self.active.get_mut(&d.id) {

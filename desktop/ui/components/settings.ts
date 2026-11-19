@@ -14,6 +14,7 @@ export class SettingsComponent {
   private host: HostInfo | null;
   private sdk: SdkInfo | null;
   private accelerationText: string;
+  private emulatorVersion = '';
   private installedImagesCount: number;
   private networkReport: NetworkReport | null;
   private callbacks: SettingsCallbacks;
@@ -71,13 +72,15 @@ export class SettingsComponent {
     sdk: SdkInfo | null,
     accelerationText: string,
     imagesCount: number,
-    networkReport: NetworkReport | null
+    networkReport: NetworkReport | null,
+    emulatorVersion: string
   ): void {
     this.host = host;
     this.sdk = sdk;
     this.accelerationText = accelerationText;
     this.installedImagesCount = imagesCount;
     this.networkReport = networkReport;
+    this.emulatorVersion = emulatorVersion;
     this.render();
   }
 
@@ -163,6 +166,14 @@ export class SettingsComponent {
             <span class="platform-badge ${this.accelerationText.split(/\r?\n/).some(line => line.trim() === '0') ? 'active' : 'notice'}">
               ${this.accelerationText.split(/\r?\n/).some(line => line.trim() === '0') ? '✓ Hardware Accelerated' : 'Acceleration not verified'}
             </span>
+          </div>
+        </div>
+
+        <div class="setting-row">
+          <div>
+            <div style="font-weight: 500; font-size: 13px;">Emulator Version</div>
+            <div class="form-helper-text">${this.escapeHtml(this.emulatorVersion.split(/\r?\n/).find(line => line.trim()) || 'Version not verified')}</div>
+            <div class="form-helper-text">A successful acceleration or version probe does not establish guest boot readiness.</div>
           </div>
         </div>
 

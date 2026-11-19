@@ -20,6 +20,7 @@ export interface DeviceSpec {
   height: number;
   disk_mb: number;
   locale: string;
+  graphics_mode?: 'auto' | 'software';
 }
 
 export interface Device {
@@ -75,6 +76,7 @@ export type Request =
   | { action: 'images' }
   | { action: 'hardware_profiles' }
   | { action: 'acceleration' }
+  | { action: 'emulator_version' }
   | { action: 'list' }
   | { action: 'tick' }
   | { action: 'network' }
