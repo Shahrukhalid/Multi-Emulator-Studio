@@ -23,9 +23,18 @@ impl Store {
         Ok(())
     }
     pub fn list(&self) -> Result<Vec<Device>> {
-        let mut stmt = self.0.prepare("SELECT data FROM devices ORDER BY id")?;
-        let rows = stmt.query_map([], |r| r.get::<_, String>(0))?;
-        rows.map(|r| Ok(serde_json::from_str(&r?)?)).collect()
+        let mut stmt = self.0.prepare("SELECT id, data FROM devices ORDER BY id")?;
+        let rows = stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?;
+        rows.map(|r| {
+            let (id, data) = r?;
+            let d: Device = serde_json::from_str(&data)?;
+            if d.id.to_string() != id {
+                return Err(Error::Invalid("stored device identity mismatch".into()));
+            }
+            d.spec.validate()?;
+            Ok(d)
+        })
+        .collect()
     }
     pub fn get(&self, id: Uuid) -> Result<Device> {
         let value: Option<String> = self
@@ -36,9 +45,13 @@ impl Store {
                 |r| r.get(0),
             )
             .optional()?;
-        Ok(serde_json::from_str(
-            &value.ok_or_else(|| Error::Invalid("unknown device".into()))?,
-        )?)
+        let d: Device =
+            serde_json::from_str(&value.ok_or_else(|| Error::Invalid("unknown device".into()))?)?;
+        if d.id != id {
+            return Err(Error::Invalid("stored device identity mismatch".into()));
+        }
+        d.spec.validate()?;
+        Ok(d)
     }
     pub fn remove(&self, id: Uuid) -> Result<()> {
         if self
@@ -80,5 +93,20 @@ mod tests {
         assert!(s.insert(&d).is_err());
         drop(s);
         assert_eq!(Store::open(&path).unwrap().list().unwrap().len(), 120);
+    }
+    #[test]
+    fn rejects_mismatched_persisted_identity() {
+        let dir = tempfile::tempdir().unwrap();
+        let s = Store::open(&dir.path().join("test.db")).unwrap();
+        let a = Device::new(crate::model::sample()).unwrap();
+        let b = Device::new(crate::model::sample()).unwrap();
+        s.insert(&a).unwrap();
+        s.0.execute(
+            "UPDATE devices SET data=?1 WHERE id=?2",
+            params![serde_json::to_string(&b).unwrap(), a.id.to_string()],
+        )
+        .unwrap();
+        assert!(s.get(a.id).is_err());
+        assert!(s.list().is_err());
     }
 }

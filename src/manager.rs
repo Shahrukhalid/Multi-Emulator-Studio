@@ -54,7 +54,17 @@ impl<E: Engine> Manager<E> {
     }
     pub fn start(&mut self, id: Uuid) -> Result<Status> {
         self.failed_starts.remove(&id);
-        let status = self.engine.start(&self.store.get(id)?)?;
+        let device = self.store.get(id)?;
+        let status = match self.engine.start(&device) {
+            Ok(status) => status,
+            Err(err) => {
+                if self.queue.contains(&id) {
+                    self.queue.retain(|queued| *queued != id);
+                    self.failed_starts.insert(id, err.to_string());
+                }
+                return Err(err);
+            }
+        };
         if status.state == DeviceState::Queued {
             if !self.queue.contains(&id) {
                 self.queue.push_back(id);
@@ -291,5 +301,25 @@ mod tests {
             .any(|s| s.id == d.id && s.state == DeviceState::Ready));
         assert!(m.status(c.id).unwrap().diagnostic.is_some());
         assert!(!m.queue.contains(&c.id));
+    }
+    #[test]
+    fn explicit_failed_retry_is_removed_from_queue() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut m = Manager::open(dir.path(), Fake::default()).unwrap();
+        let a = m.create(crate::model::sample()).unwrap();
+        let b = m.create(crate::model::sample()).unwrap();
+        let c = m.create(crate::model::sample()).unwrap();
+        m.start(a.id).unwrap();
+        m.start(b.id).unwrap();
+        assert_eq!(m.start(c.id).unwrap().state, DeviceState::Queued);
+        m.engine.fail_start.insert(c.id);
+        assert!(m.start(c.id).is_err());
+        assert!(!m.queue.contains(&c.id));
+        assert!(m.status(c.id).unwrap().diagnostic.is_some());
+        m.stop(a.id).unwrap();
+        m.engine.fail_start.remove(&c.id);
+        m.tick().unwrap();
+        assert!(!m.engine.active.contains_key(&c.id));
+        assert_eq!(m.start(c.id).unwrap().state, DeviceState::Ready);
     }
 }

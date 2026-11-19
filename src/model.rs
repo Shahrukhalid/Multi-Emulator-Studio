@@ -19,6 +19,9 @@ impl DeviceSpec {
         let safe = |s: &str| {
             !s.is_empty()
                 && s.len() <= 128
+                && s != "."
+                && s != ".."
+                && !s.starts_with('-')
                 && s.bytes()
                     .all(|c| c.is_ascii_alphanumeric() || b"_-.".contains(&c))
         };
@@ -41,6 +44,17 @@ impl DeviceSpec {
         }
         Ok(())
     }
+}
+
+#[cfg(test)]
+#[test]
+fn rejects_ambiguous_sdk_identifiers() {
+    let mut spec = sample();
+    spec.hardware_profile = "-force".into();
+    assert!(spec.validate().is_err());
+    spec.hardware_profile = "pixel_6".into();
+    spec.image = "system-images;android-34;..;arm64-v8a".into();
+    assert!(spec.validate().is_err());
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

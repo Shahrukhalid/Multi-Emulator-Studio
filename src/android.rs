@@ -18,16 +18,18 @@ use uuid::Uuid;
 
 const SHORT: Duration = Duration::from_secs(20);
 
+fn log_tail(log: &Path, limit: u64) -> std::io::Result<String> {
+    let mut file = fs::File::open(log)?;
+    let start = file.metadata()?.len().saturating_sub(limit);
+    file.seek(SeekFrom::Start(start))?;
+    let mut bytes = Vec::new();
+    file.take(limit).read_to_end(&mut bytes)?;
+    Ok(String::from_utf8_lossy(&bytes).trim().to_owned())
+}
+
 fn crash_diagnostic(log: &Path, exit: std::process::ExitStatus) -> String {
     let message = format!("emulator exited: {exit}; see local emulator log");
-    let excerpt = (|| -> std::io::Result<String> {
-        let mut file = fs::File::open(log)?;
-        let start = file.metadata()?.len().saturating_sub(4096);
-        file.seek(SeekFrom::Start(start))?;
-        let mut bytes = Vec::new();
-        file.take(4096).read_to_end(&mut bytes)?;
-        Ok(String::from_utf8_lossy(&bytes).trim().to_owned())
-    })();
+    let excerpt = log_tail(log, 4096);
     match excerpt {
         Ok(tail) if !tail.is_empty() => format!("{message}\n{tail}"),
         _ => message,
@@ -60,6 +62,11 @@ pub fn run(cmd: &mut Command, stdin: Option<&str>, timeout: Duration) -> Result<
     }
     let deadline = Instant::now() + timeout;
     loop {
+        if output.metadata()?.len() > 16 * 1024 * 1024 {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(Error::Runtime("SDK command output exceeded 16 MiB".into()));
+        }
         if let Some(status) = child.try_wait()? {
             let size = output.metadata()?.len();
             output.seek(SeekFrom::Start(size.saturating_sub(1024 * 1024)))?;
@@ -187,6 +194,9 @@ fn parse_hardware_profiles(text: &str) -> Vec<String> {
         .filter(|s| {
             !s.is_empty()
                 && s.len() <= 128
+                && *s != "."
+                && *s != ".."
+                && !s.starts_with('-')
                 && s.bytes()
                     .all(|c| c.is_ascii_alphanumeric() || b"_-.".contains(&c))
         })
@@ -201,7 +211,7 @@ fn parse_hardware_profiles(text: &str) -> Vec<String> {
 #[test]
 fn hardware_catalog_filters_unsupported_identifiers() {
     assert_eq!(
-        parse_hardware_profiles("pixel_6\nNexus 5\nmedium_phone\npixel_6\n"),
+        parse_hardware_profiles("pixel_6\nNexus 5\nmedium_phone\npixel_6\n..\n-force\n"),
         ["medium_phone", "pixel_6"]
     );
 }
@@ -209,9 +219,50 @@ fn hardware_catalog_filters_unsupported_identifiers() {
 struct Instance {
     child: Child,
     port: u16,
-    state: DeviceState,
     started: Instant,
+    ever_ready: bool,
     spec: crate::model::DeviceSpec,
+}
+
+fn readiness_state(ever_ready: bool, ready: bool) -> DeviceState {
+    if ready {
+        DeviceState::Ready
+    } else if ever_ready {
+        DeviceState::Unknown
+    } else {
+        DeviceState::Starting
+    }
+}
+
+#[cfg(test)]
+#[test]
+fn transient_adb_loss_does_not_return_to_initial_boot() {
+    assert_eq!(readiness_state(false, false), DeviceState::Starting);
+    assert_eq!(readiness_state(false, true), DeviceState::Ready);
+    assert_eq!(readiness_state(true, false), DeviceState::Unknown);
+    assert_eq!(readiness_state(true, true), DeviceState::Ready);
+}
+
+#[cfg(test)]
+#[test]
+fn stopped_crash_logs_remain_available_and_stop_clears_crash() {
+    let dir = tempfile::tempdir().unwrap();
+    let sdk = Sdk {
+        root: dir.path().to_path_buf(),
+        emulator: dir.path().join("emulator"),
+        adb: dir.path().join("adb"),
+        avdmanager: dir.path().join("avdmanager"),
+        sdkmanager: dir.path().join("sdkmanager"),
+    };
+    let mut engine = Android::new(sdk, dir.path().join("avds")).unwrap();
+    let d = Device::new(crate::model::sample()).unwrap();
+    fs::write(engine.log_path(&d), "local crash log").unwrap();
+    engine.crashed.insert(d.id, "test failure".into());
+    assert_eq!(engine.status(&d).unwrap().state, DeviceState::Crashed);
+    assert_eq!(engine.logs(&d).unwrap(), "local crash log");
+    engine.stop(&d).unwrap();
+    assert_eq!(engine.status(&d).unwrap().state, DeviceState::Stopped);
+    assert_eq!(log_tail(&engine.log_path(&d), 3).unwrap(), "log");
 }
 
 pub struct Android {
@@ -245,6 +296,9 @@ impl Android {
     }
     fn avd_dir(&self, d: &Device) -> PathBuf {
         self.home.join(format!("{}.avd", d.avd_name()))
+    }
+    fn log_path(&self, d: &Device) -> PathBuf {
+        self.home.join(format!("{}.log", d.avd_name()))
     }
     fn adb_for(&self, port: u16) -> Command {
         let mut cmd = self.command(&self.sdk.adb);
@@ -357,28 +411,51 @@ impl Engine for Android {
             Some("no\n"),
             Duration::from_secs(60),
         )?;
-        let config = self.avd_dir(d).join("config.ini");
-        let mut data = fs::read_to_string(&config)?;
-        let settings = [
-            ("hw.ramSize", d.spec.ram_mb.to_string()),
-            ("hw.cpu.ncore", d.spec.cores.to_string()),
-            ("hw.lcd.width", d.spec.width.to_string()),
-            ("hw.lcd.height", d.spec.height.to_string()),
-            ("disk.dataPartition.size", format!("{}M", d.spec.disk_mb)),
-        ];
-        for (key, val) in settings {
-            data = data
-                .lines()
-                .filter(|line| {
-                    line.split_once('=')
-                        .map(|(k, _)| k.trim() != key)
-                        .unwrap_or(true)
-                })
-                .collect::<Vec<_>>()
-                .join("\n");
-            data.push_str(&format!("\n{key}={val}\n"));
+        let configured = (|| -> Result<()> {
+            let avd = self.avd_dir(d).canonicalize()?;
+            if !avd.starts_with(&self.home) {
+                return Err(Error::Conflict("AVD outside managed directory".into()));
+            }
+            let config = avd.join("config.ini");
+            if !config.canonicalize()?.starts_with(&avd) {
+                return Err(Error::Conflict(
+                    "AVD config outside managed directory".into(),
+                ));
+            }
+            let mut data = fs::read_to_string(&config)?;
+            let settings = [
+                ("hw.ramSize", d.spec.ram_mb.to_string()),
+                ("hw.cpu.ncore", d.spec.cores.to_string()),
+                ("hw.lcd.width", d.spec.width.to_string()),
+                ("hw.lcd.height", d.spec.height.to_string()),
+                ("disk.dataPartition.size", format!("{}M", d.spec.disk_mb)),
+            ];
+            for (key, val) in settings {
+                data = data
+                    .lines()
+                    .filter(|line| {
+                        line.split_once('=')
+                            .map(|(k, _)| k.trim() != key)
+                            .unwrap_or(true)
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                data.push_str(&format!("\n{key}={val}\n"));
+            }
+            fs::write(config, data)?;
+            Ok(())
+        })();
+        if let Err(err) = configured {
+            // Only the just-created, UUID-named AVD is eligible for rollback.
+            if self.assert_idle(d).is_ok() {
+                if let Err(cleanup) = self.delete(d) {
+                    return Err(Error::Runtime(format!(
+                        "profile configuration failed: {err}; rollback failed: {cleanup}"
+                    )));
+                }
+            }
+            return Err(err);
         }
-        fs::write(config, data)?;
         Ok(())
     }
     fn start(&mut self, d: &Device) -> Result<Status> {
@@ -424,7 +501,7 @@ impl Engine for Android {
         }
         let port = self.port()?;
         let name = d.avd_name();
-        let log = fs::File::create(self.home.join(format!("{name}.log")))?;
+        let log = fs::File::create(self.log_path(d))?;
         let mut launch = self.command(&self.sdk.emulator);
         launch.args([
             "-avd",
@@ -448,8 +525,8 @@ impl Engine for Android {
             Instance {
                 child,
                 port,
-                state: DeviceState::Starting,
                 started: Instant::now(),
+                ever_ready: false,
                 spec: d.spec.clone(),
             },
         );
@@ -499,8 +576,8 @@ impl Engine for Android {
         }
         let port = instance.port;
         let pid = instance.child.id();
-        let should_timeout = instance.state == DeviceState::Starting
-            && instance.started.elapsed() > Duration::from_secs(300);
+        let ever_ready = instance.ever_ready;
+        let should_timeout = !ever_ready && instance.started.elapsed() > Duration::from_secs(300);
         let ready = self.owns_port(d, port)
             && run(
                 self.adb_for(port)
@@ -518,13 +595,9 @@ impl Engine for Android {
             );
             return Err(Error::Timeout("emulator boot".into()));
         }
-        let state = if ready {
-            DeviceState::Ready
-        } else {
-            DeviceState::Starting
-        };
+        let state = readiness_state(ever_ready, ready);
         if let Some(i) = self.active.get_mut(&d.id) {
-            i.state = state.clone();
+            i.ever_ready |= ready;
         }
         let addresses = if ready {
             run(
@@ -553,12 +626,15 @@ impl Engine for Android {
             pid: Some(pid),
             console_port: Some(port),
             addresses,
-            diagnostic: None,
+            diagnostic: (ever_ready && !ready)
+                .then(|| "emulator still running; ADB readiness temporarily unavailable".into()),
         })
     }
     fn stop(&mut self, d: &Device) -> Result<()> {
         let Some(port) = self.active.get(&d.id).map(|i| i.port) else {
-            return self.assert_idle(d);
+            self.assert_idle(d)?;
+            self.crashed.remove(&d.id);
+            return Ok(());
         };
         if self.owns_port(d, port) {
             let _ = run(self.adb_for(port).args(["emu", "kill"]), None, SHORT);
@@ -571,12 +647,14 @@ impl Engine for Android {
         loop {
             if i.child.try_wait()?.is_some() {
                 self.active.remove(&d.id);
+                self.crashed.remove(&d.id);
                 return Ok(());
             }
             if Instant::now() > deadline {
                 i.child.kill()?;
                 i.child.wait()?;
                 self.active.remove(&d.id);
+                self.crashed.remove(&d.id);
                 return Ok(());
             }
             thread::sleep(Duration::from_millis(100));
@@ -599,20 +677,32 @@ impl Engine for Android {
             return Err(Error::Invalid("select a local APK file".into()));
         }
         let port = self.ready_port(d)?;
-        run(
+        let output = run(
             self.adb_for(port).args(["install", "-r"]).arg(path),
             None,
             Duration::from_secs(120),
         )?;
+        if !output.lines().any(|line| line.trim() == "Success") {
+            return Err(Error::Runtime(format!(
+                "APK install not confirmed: {output}"
+            )));
+        }
         Ok(())
     }
     fn logs(&mut self, d: &Device) -> Result<String> {
-        let port = self.ready_port(d)?;
-        run(
-            self.adb_for(port).args(["logcat", "-d", "-t", "200"]),
-            None,
-            SHORT,
-        )
+        let status = self.status(d);
+        if let Ok(s) = status {
+            if s.state == DeviceState::Ready {
+                if let Some(port) = s.console_port {
+                    return run(
+                        self.adb_for(port).args(["logcat", "-d", "-t", "200"]),
+                        None,
+                        SHORT,
+                    );
+                }
+            }
+        }
+        log_tail(&self.log_path(d), 64 * 1024).map_err(Error::from)
     }
 }
 impl Drop for Android {
