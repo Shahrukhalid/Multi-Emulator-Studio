@@ -39,18 +39,23 @@ jobs:
           key: desktop-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('desktop/Cargo.lock') }}
       - run: npm ci --ignore-scripts
       - run: npm run build
+      - run: node --test verify-packages.test.mjs
       - run: cargo +stable fmt --check
       - run: cargo +stable clippy --locked --all-targets -- -D warnings
       - run: cargo +stable test --locked
       - run: cargo install cargo-audit --locked
       - run: cargo audit
       - run: cargo install tauri-cli --version 2.12.4 --locked
+      # Never validate stale bundles restored from the build cache.
+      - run: node -e "require('node:fs').rmSync('target/release/bundle', {recursive:true, force:true})"
       - run: cargo tauri build --bundles ${{ matrix.bundle }} --no-sign --ci -- --locked
+      - run: node verify-packages.mjs target/release/bundle ${{ matrix.bundle }}
       - uses: actions/upload-artifact@v4
         with:
           name: development-unsigned-${{ runner.os }}-${{ runner.arch }}
           path: |
             desktop/target/release/bundle/**/*.dmg
             desktop/target/release/bundle/**/*.exe
+            desktop/target/release/bundle/SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 7

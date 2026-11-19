@@ -560,7 +560,9 @@ impl Engine for Android {
         }
         self.check_disk(1024)?;
         if !self.sdk.images()?.contains(&d.spec.image) {
-            return Err(Error::Unavailable("configured system image is missing".into()));
+            return Err(Error::Unavailable(
+                "configured system image is missing".into(),
+            ));
         }
         let accel = self.sdk.acceleration()?;
         if !accel.lines().any(|l| l.trim() == "0") {

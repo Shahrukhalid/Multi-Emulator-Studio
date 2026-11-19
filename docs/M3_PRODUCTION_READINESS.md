@@ -43,3 +43,19 @@ Status: in progress; no production release authorized by these checks alone.
 - The opt-in physical-host test now records SDK version and graphics mode, rejects failed acceleration preflight, and independently verifies boot completion on both disposable guests before testing data persistence.
 - Official Android documentation describes software graphics as an option for graphics compatibility; it is not evidence that the recorded SIGILL will be resolved: https://developer.android.com/studio/run/emulator-acceleration
 - Physical macOS and Windows runtime verification is still required. The current Linux development environment cannot verify the supported native hosts. Compilation and packaging are not substitutes for two successful guest boots, persistence checks, and clean installation.
+
+## Sixth increment — consolidated release candidate
+
+- Fix the M3.5 rustfmt failure. Local Apple Silicon checks: rustfmt, core Clippy, 17 core tests, desktop Clippy and TypeScript build passed.
+- Real-host software graphics smoke attempt stopped at the official emulator version preflight. The executable returned SIGABRT with a Qt message that its build requires NEON. No AVDs were created by this attempt, and software graphics was not exercised. Do not bypass host restrictions or claim the underlying incompatibility is fixed.
+- Require nonempty platform installer artifacts and SHA-256 manifests in desktop CI. The checksums verify artifact integrity, not code signing or successful installation.
+- Consolidate the entire M2/M3/UI stack in one draft pull request targeting main. Keep the earlier branches available until the consolidated candidate is verified.
+
+### Production release gate
+
+- [ ] Consolidated macOS and Windows core/desktop CI, dependency audit, packaging and checksum checks pass.
+- [ ] Real physical-host smoke test passes on both supported platforms, with two completed boots, independent test app data, rename preservation, restart persistence and cleanup.
+- [ ] Clean install, native GUI interactions, uninstall and installer signing/notarization are verified for each supported platform.
+- [ ] Review final changes, reconcile pending dependency updates, and ensure release notes reflect limitations.
+
+No production merge or release until the applicable gates are verified. A CI-generated unsigned development artifact is not a production installer.
