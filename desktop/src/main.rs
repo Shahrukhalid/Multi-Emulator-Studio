@@ -9,6 +9,7 @@ use std::{
     time::Duration,
 };
 use tauri::{Manager, State};
+use tauri_plugin_dialog::DialogExt;
 
 type Shared = Arc<Mutex<Option<Controller>>>;
 type HealthCache = Arc<Mutex<Option<Result<serde_json::Value, ApiError>>>>;
@@ -108,8 +109,48 @@ async fn dispatch(
 fn default_data_dir(app: tauri::AppHandle) -> Result<PathBuf, String> {
     app.path().app_local_data_dir().map_err(|e| e.to_string())
 }
+
+#[tauri::command]
+async fn pick_apk(app: tauri::AppHandle) -> Result<Option<PathBuf>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let selected = app
+            .dialog()
+            .file()
+            .add_filter("Android package", &["apk"])
+            .blocking_pick_file();
+        let Some(selected) = selected else {
+            return Ok(None);
+        };
+        let path = selected.into_path().map_err(|e| e.to_string())?;
+        if !path.is_file()
+            || !path
+                .extension()
+                .is_some_and(|ext| ext.eq_ignore_ascii_case("apk"))
+        {
+            return Err("Select a local APK file".into());
+        }
+        Ok(Some(path))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn pick_sdk_directory(app: tauri::AppHandle) -> Result<Option<PathBuf>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        app.dialog()
+            .file()
+            .blocking_pick_folder()
+            .map(|selected| selected.into_path().map_err(|e| e.to_string()))
+            .transpose()
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 fn main() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .manage(Arc::new(Mutex::new(None::<Controller>)))
         .manage(Arc::new(Mutex::new(
             None::<Result<serde_json::Value, ApiError>>,
@@ -142,6 +183,8 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             connect,
             install_android_runtime,
+            pick_apk,
+            pick_sdk_directory,
             dispatch,
             health,
             default_data_dir

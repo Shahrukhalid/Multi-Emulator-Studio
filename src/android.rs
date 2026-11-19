@@ -714,7 +714,11 @@ impl Engine for Android {
     }
     fn install_apk(&mut self, d: &Device, path: &Path) -> Result<()> {
         let path = path.canonicalize()?;
-        if !path.is_file() || path.extension().and_then(|s| s.to_str()) != Some("apk") {
+        if !path.is_file()
+            || !path
+                .extension()
+                .is_some_and(|ext| ext.eq_ignore_ascii_case("apk"))
+        {
             return Err(Error::Invalid("select a local APK file".into()));
         }
         let port = self.ready_port(d)?;

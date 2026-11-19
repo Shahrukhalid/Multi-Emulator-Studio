@@ -4,6 +4,7 @@ export interface SettingsCallbacks {
   onThemeChange: (theme: 'system' | 'dark' | 'light') => void;
   onDataDirChange: (path: string, sdkRoot?: string | null) => Promise<void>;
   onInstallRuntime: (sdkRoot: string) => Promise<void>;
+  onPickSdkDirectory: () => Promise<string | null>;
   onCheckSdk: () => Promise<void>;
   onFetchLogs: () => Promise<string>;
 }
@@ -125,6 +126,7 @@ export class SettingsComponent {
           <label for="setting-sdk-input">Android SDK directory</label>
           <input class="form-text-input" id="setting-sdk-input" value="${this.escapeHtml(this.sdkDir)}" placeholder="Path to installed official Android SDK" ${this.connected || this.installing ? 'readonly' : ''} />
           <button class="nav-item" id="btn-connect-sdk" ${this.connected || this.installing ? 'disabled' : ''}>${this.connected ? 'Connected' : 'Connect SDK'}</button>
+          <button class="nav-item" id="btn-sdk-browse" ${this.connected || this.installing ? 'disabled' : ''}>Browse…</button>
         </div>
       </div>
 
@@ -244,6 +246,23 @@ export class SettingsComponent {
     });
 
     // Connect after initial SDK discovery fails. Do not migrate live storage.
+    const browse = this.element.querySelector('#btn-sdk-browse') as HTMLButtonElement;
+    browse.addEventListener('click', async () => {
+      if (this.connected || this.installing) return;
+      browse.disabled = true;
+      try {
+        const selected = await this.callbacks.onPickSdkDirectory();
+        if (selected && !this.connected && !this.installing) {
+          this.sdkDir = selected;
+          (this.element.querySelector('#setting-sdk-input') as HTMLInputElement).value = selected;
+        }
+      } catch (err: unknown) {
+        const result = this.element.querySelector('#runtime-install-result') as HTMLElement;
+        result.textContent = (err as { message?: string }).message || String(err);
+      } finally {
+        browse.disabled = this.connected || this.installing;
+      }
+    });
     this.element.querySelector('#btn-connect-sdk')?.addEventListener('click', async () => {
       if (this.installing) return;
       const input = this.element.querySelector('#setting-sdk-input') as HTMLInputElement;

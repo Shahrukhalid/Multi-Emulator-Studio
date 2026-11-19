@@ -23,6 +23,8 @@ export interface IApiClient {
   getDefaultDataDir(): Promise<string>;
   connect(root: string, sdkRoot?: string | null): Promise<void>;
   installRuntime(sdkRoot: string): Promise<void>;
+  pickApk(): Promise<string | null>;
+  pickSdkDirectory(): Promise<string | null>;
   dispatch<T>(request: Request): Promise<T>;
   health(): Promise<Status[]>;
 
@@ -67,6 +69,14 @@ class TauriApiClient implements IApiClient {
 
   installRuntime(sdkRoot: string): Promise<void> {
     return this.invoke<void>('install_android_runtime', { sdkRoot });
+  }
+
+  pickApk(): Promise<string | null> {
+    return this.invoke<string | null>('pick_apk');
+  }
+
+  pickSdkDirectory(): Promise<string | null> {
+    return this.invoke<string | null>('pick_sdk_directory');
   }
 
   dispatch<T>(request: Request): Promise<T> {
@@ -195,6 +205,14 @@ class BrowserPreviewClient implements IApiClient {
 
   async installRuntime(_sdkRoot: string): Promise<void> {
     throw new Error('Runtime installation requires the native desktop app.');
+  }
+
+  async pickApk(): Promise<string | null> {
+    throw new Error('Native file selection requires the desktop app.');
+  }
+
+  async pickSdkDirectory(): Promise<string | null> {
+    throw new Error('Native directory selection requires the desktop app.');
   }
 
   async dispatch<T>(request: Request): Promise<T> {

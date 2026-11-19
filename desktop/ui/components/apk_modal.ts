@@ -2,6 +2,7 @@ import { Device, Status } from '../types.js';
 import { Icons } from '../icons.js';
 
 export interface ApkModalCallbacks {
+  onPick: () => Promise<string | null>;
   onInstall: (device: Device, apkPath: string) => Promise<void>;
   onClose: () => void;
 }
@@ -49,6 +50,7 @@ export class ApkModalComponent {
           <div class="form-block">
             <label class="form-label-title" for="apk-file-path">Local APK Path</label>
             <input class="form-text-input" id="apk-file-path" placeholder="C:\\path\\to\\app.apk" />
+            <button type="button" class="nav-item" id="btn-apk-browse">Browse APK…</button>
             <span class="form-helper-text">Enter the absolute path to a valid Android package file.</span>
           </div>
 
@@ -75,6 +77,23 @@ export class ApkModalComponent {
     const errBox = this.element.querySelector('#apk-err-banner') as HTMLElement;
     const submitBtn = this.element.querySelector('#btn-apk-submit') as HTMLButtonElement;
     const dropzone = this.element.querySelector('#apk-drag-box') as HTMLElement;
+    const browse = this.element.querySelector('#btn-apk-browse') as HTMLButtonElement;
+    browse.addEventListener('click', async () => {
+      if (this.isInstalling) return;
+      browse.disabled = true;
+      try {
+        const selected = await this.callbacks.onPick();
+        if (selected) {
+          input.value = selected;
+          errBox.style.display = 'none';
+        }
+      } catch (err: unknown) {
+        errBox.textContent = (err as { message?: string }).message || String(err);
+        errBox.style.display = 'block';
+      } finally {
+        browse.disabled = false;
+      }
+    });
 
     dropzone.addEventListener('dragover', (e) => {
       e.preventDefault();

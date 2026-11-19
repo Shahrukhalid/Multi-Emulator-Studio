@@ -109,6 +109,7 @@ export class App {
           await this.refreshAll();
           this.startHealthPolling();
         },
+        onPickSdkDirectory: () => this.api.pickSdkDirectory(),
         onCheckSdk: async () => {
           if (!this.isConnected && !this.api.isPreview) {
             toast.show('Connect your Android SDK before checking installed tools.', 'warning');
@@ -336,6 +337,7 @@ export class App {
   private handleInstallApk(device: Device): void {
     const status = this.statuses.find((s) => s.id === device.id) ?? null;
     const modal = new ApkModalComponent(device, status, {
+      onPick: () => this.api.pickApk(),
       onInstall: async (_d, path) => {
         await this.api.installApk(device.id, path);
         toast.show(`Installed APK on ${device.spec.name}`, 'success');
