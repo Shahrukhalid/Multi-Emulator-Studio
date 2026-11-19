@@ -4,11 +4,10 @@ set -euo pipefail
 [[ "$(uname -s)" == Darwin ]] || { echo 'macOS required' >&2; exit 1; }
 root="${1:?bundle directory required}"
 shopt -s nullglob
-apps=("$root"/macos/*.app)
 dmgs=("$root"/dmg/*.dmg)
-[[ ${#apps[@]} -eq 1 && ${#dmgs[@]} -eq 1 ]] || { echo 'Expected one app and one DMG' >&2; exit 1; }
-bash verify-macos-app.sh "${apps[0]}"
-codesign -dv --verbose=4 "${apps[0]}" 2>&1 | grep -F 'Signature=adhoc' >/dev/null
+[[ ${#dmgs[@]} -eq 1 ]] || { echo 'Expected exactly one generated DMG' >&2; exit 1; }
+# Tauri removes the intermediate .app when only a DMG is requested.
+# Verify the actual distributed application inside the disk image instead.
 hdiutil verify "${dmgs[0]}"
 mountpoint=$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/mes-dev-mount.XXXXXX")
 mounted=0

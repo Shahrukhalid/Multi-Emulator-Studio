@@ -2,7 +2,7 @@
 
 The ordinary macOS pull-request build produces ad-hoc-signed development artifacts. These are not notarized public installers and macOS Gatekeeper may still reject downloaded copies. Windows development artifacts remain unsigned. Never disable Gatekeeper or remove quarantine to work around an integrity error.
 
-For local development on a Mac without an Apple Developer account, build from reviewed source with `APPLE_SIGNING_IDENTITY=- cargo tauri build --bundles app --ci -- --locked` from the desktop directory. Verify the resulting `.app` using `codesign --verify --deep --strict --verbose=2`. The local signature verifies code integrity, not publisher identity or notarization. Ordinary CI verifies the ad-hoc signature both before and after mounting its DMG. The protected Developer ID workflow below remains mandatory for production distribution.
+For local development on a Mac without an Apple Developer account, build from reviewed source with `APPLE_SIGNING_IDENTITY=- cargo tauri build --bundles app --ci -- --locked` from the desktop directory. Verify the resulting `.app` using `codesign --verify --deep --strict --verbose=2`. The local signature verifies code integrity, not publisher identity or notarization. Ordinary CI verifies the DMG integrity and ad-hoc signature of the actual app mounted read-only. Tauri removes the intermediate app in DMG-only builds, so verification does not require it. The protected Developer ID workflow below remains mandatory for production distribution.
 
 ## One-time owner setup
 
