@@ -18,6 +18,44 @@ use std::{
 use uuid::Uuid;
 
 const SHORT: Duration = Duration::from_secs(20);
+const SCREEN_TIMEOUT: Duration = Duration::from_secs(15);
+const SCREEN_LIMIT: u64 = 32 * 1024 * 1024;
+
+// Capture workers own a verified ADB transport, not a reusable emulator port.
+static SCREEN_WORKERS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+pub struct ScreenCapture {
+    command: Command,
+}
+impl ScreenCapture {
+    pub fn capture(mut self) -> Result<Vec<u8>> {
+        capture_png(&mut self.command)
+    }
+}
+impl Drop for ScreenCapture {
+    fn drop(&mut self) {
+        SCREEN_WORKERS.fetch_sub(1, std::sync::atomic::Ordering::AcqRel);
+    }
+}
+
+fn transport_id(list: &str, port: u16) -> Option<u64> {
+    let serial = format!("emulator-{port}");
+    list.lines().find_map(|line| {
+        let mut fields = line.split_whitespace();
+        if fields.next()? != serial || fields.next()? != "device" {
+            return None;
+        }
+        fields.find_map(|field| field.strip_prefix("transport_id:")?.parse().ok())
+    })
+}
+
+#[test]
+fn capture_transport_is_exact_and_online() {
+    let list = "emulator-5554 device product:sdk transport_id:7\nemulator-5556 offline transport_id:8\nemulator-5558 device transport_id:9";
+    assert_eq!(transport_id(list, 5554), Some(7));
+    assert_eq!(transport_id(list, 5556), None);
+    assert_eq!(transport_id(list, 5558), Some(9));
+    assert_eq!(transport_id(list, 5560), None);
+}
 
 fn log_tail(log: &Path, limit: u64) -> std::io::Result<String> {
     let mut file = fs::File::open(log)?;
@@ -70,14 +108,20 @@ fn capture_png(cmd: &mut Command) -> Result<Vec<u8>> {
         .stdout(stdout.try_clone()?)
         .stderr(Stdio::null())
         .spawn()?;
-    let deadline = Instant::now() + Duration::from_secs(3);
-    let limit = 16 * 1024 * 1024;
+    let deadline = Instant::now() + SCREEN_TIMEOUT;
+    let limit = SCREEN_LIMIT;
     loop {
-        if stdout.metadata()?.len() > limit || Instant::now() >= deadline {
+        let oversized = stdout.metadata()?.len() > limit;
+        if oversized || Instant::now() >= deadline {
             let _ = child.kill();
             let _ = child.wait();
             return Err(Error::Runtime(
-                "Screen capture exceeded its size or time limit".into(),
+                if oversized {
+                    "Screen capture exceeded 32 MiB"
+                } else {
+                    "Screen capture timed out after 15 seconds; Android may be busy"
+                }
+                .into(),
             ));
         }
         if let Some(status) = child.try_wait()? {
@@ -628,6 +672,28 @@ impl Android {
         }
         Ok(port)
     }
+    pub fn prepare_screen_capture(&mut self, d: &Device) -> Result<ScreenCapture> {
+        let port = self.interactive_port(d)?;
+        let list = run(
+            self.command(&self.sdk.adb).args(["devices", "-l"]),
+            None,
+            Duration::from_secs(5),
+        )?;
+        let transport = transport_id(&list, port)
+            .ok_or_else(|| Error::Unavailable("Android ADB is reconnecting".into()))?;
+        if !self.owns_port(d, port) {
+            return Err(Error::Conflict("Device identity changed".into()));
+        }
+        let mut command = self.command(&self.sdk.adb);
+        command.args(["-t", &transport.to_string(), "exec-out", "screencap", "-p"]);
+        use std::sync::atomic::Ordering;
+        SCREEN_WORKERS
+            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |n| {
+                (n < 2).then_some(n + 1)
+            })
+            .map_err(|_| Error::Unavailable("Screen workers busy; retrying".into()))?;
+        Ok(ScreenCapture { command })
+    }
     fn owns_port(&self, d: &Device, port: u16) -> bool {
         run(
             self.adb_for(port).args(["emu", "avd", "name"]),
@@ -1002,11 +1068,10 @@ impl Engine for Android {
         log_tail(&self.log_path(d), 64 * 1024).map_err(Error::from)
     }
     fn screen(&mut self, d: &Device) -> Result<ScreenFrame> {
-        frame_from_png(self.screen_png(d)?, 16 * 1024 * 1024)
+        frame_from_png(self.screen_png(d)?, SCREEN_LIMIT)
     }
     fn screen_png(&mut self, d: &Device) -> Result<Vec<u8>> {
-        let port = self.interactive_port(d)?;
-        capture_png(self.adb_for(port).args(["exec-out", "screencap", "-p"]))
+        self.prepare_screen_capture(d)?.capture()
     }
     fn video_start(&mut self, d: &Device) -> Result<Uuid> {
         self.video.retain(|_, capture| !capture.expired());

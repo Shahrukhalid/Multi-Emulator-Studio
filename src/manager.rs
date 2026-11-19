@@ -18,6 +18,11 @@ pub struct Manager<E: Engine> {
     queue: VecDeque<Uuid>,
     failed_starts: HashMap<Uuid, String>,
 }
+impl Manager<crate::android::Android> {
+    pub fn prepare_screen_capture(&mut self, id: Uuid) -> Result<crate::android::ScreenCapture> {
+        self.engine.prepare_screen_capture(&self.store.get(id)?)
+    }
+}
 impl<E: Engine> Manager<E> {
     pub fn open(root: &Path, engine: E) -> Result<Self> {
         std::fs::create_dir_all(root)?;

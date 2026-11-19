@@ -54,22 +54,15 @@ async fn qa_runtime_check(
             .as_mut()
             .ok_or_else(|| setup_error("Complete Quick setup first"))?;
         let sdk = controller.sdk();
-        let managed = multi_emulator_core::managed_sdk::managed_root(&data)
-            .canonicalize()
-            .map_err(|err| setup_error(&err.to_string()))?;
-        if sdk.root != managed {
-            return Err(setup_error("QA self-test requires the private managed SDK"));
-        }
-        if !controller
-            .execute(Request::List)?
-            .as_array()
-            .is_some_and(|profiles| profiles.is_empty())
-        {
+        let managed = multi_emulator_core::managed_sdk::managed_root(&data).canonicalize().ok().is_some_and(|root| root == sdk.root);
+        if !controller.qa_profiles_idle().map_err(ApiError::from)? {
             return Err(setup_error(
-                "Run the disposable self-test before creating any QA profiles",
+                "Stop all existing devices before running the disposable self-test",
             ));
         }
-        Ok(multi_emulator_core::runtime_qa::run(sdk, &data))
+        let mut report = multi_emulator_core::runtime_qa::run(sdk, &data);
+        report.checks.insert(0, if managed { "Private managed SDK used; clean first-run license and installation still require separate evidence" } else { "Existing SDK used; automatic first-run installation NOT verified" }.into());
+        Ok(report)
     })
     .await
     .map_err(|err| setup_error(&err.to_string()))?
@@ -323,13 +316,15 @@ async fn screen_png(
             code: "unavailable",
             message: "Device controller busy; retrying screen refresh".into(),
         })?;
-        let png = guard
+        let capture = guard
             .as_mut()
             .ok_or_else(|| ApiError {
                 code: "unavailable",
                 message: "Connect SDK first".into(),
             })?
-            .screen_png(&id)?;
+            .prepare_screen_capture(&id)?;
+        drop(guard);
+        let png = capture.capture().map_err(ApiError::from)?;
         Ok(tauri::ipc::Response::new(png))
     })
     .await

@@ -702,10 +702,18 @@ body {
 .phone-hardware { display: flex; justify-content: center; gap: 8px; padding: 6px 12px; }
 .phone-hardware button { background: #1e293b; color: #e9eef9; border: 1px solid #344258; border-radius: 7px; padding: 7px 12px; cursor: pointer; }
 .phone-hardware button:disabled { opacity: .4; cursor: default; }
-.phone-dock { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 290px), 1fr)); gap: 16px; padding: 16px 24px; align-items: start; }
+.phone-dock { display: flex; flex-wrap: wrap; justify-content: center; gap: 20px; padding: 16px 24px; align-items: flex-start; }
 .phone-dock[hidden] { display: none; }
-.phone-panel { min-width: 0; border: 1px solid var(--border-subtle); border-radius: 14px; overflow: hidden; background: var(--bg-surface-subtle); }
-.phone-panel .phone-display img { max-height: 56vh; }
+.phone-panel { width: min(100%, max(280px, calc(var(--phone-width, 252px) + 32px))); min-width: 0; border: 1px solid var(--border-subtle); border-radius: 14px; overflow: hidden; background: var(--bg-surface-subtle); }
+.phone-panel .modal-title-bar { padding: 10px 12px; gap: 8px; }
+.phone-panel .phone-title { font-size: 15px; overflow-wrap: anywhere; }
+.phone-shell { width: min(calc(100% - 24px), var(--phone-width, 252px), calc(62vh * var(--phone-aspect, .45))); margin: 12px auto; padding: 6px; box-sizing: content-box; background: #101116; border: 2px solid #59616e; border-radius: 26px; box-shadow: 0 8px 22px #0005, inset 0 0 0 1px #252a32; }
+.phone-shell .phone-display { position: relative; width: 100%; aspect-ratio: var(--phone-aspect, .45); min-height: 0; border-radius: 19px 19px 4px 4px; background: #06080c; }
+.phone-shell .phone-display img, .phone-shell .phone-video-frame { width: 100%; height: 100%; max-height: none; max-width: none; object-fit: contain; }
+.phone-shell .phone-status { position: absolute; inset: auto 4px 4px; z-index: 1; background: #111824e8; color: #fff; border-radius: 8px; font-size: 11px; padding: 8px; overflow-wrap: anywhere; pointer-events: none; }
+.phone-shell .phone-navigation { padding: 2px 4px; background: #101116; border-radius: 0 0 19px 19px; }
+.phone-shell .phone-navigation button { width: 30%; height: 34px; font-size: 21px; }
+.phone-panel .phone-hardware { flex-wrap: wrap; }
 .phone-app-check { display: block; margin: 8px auto; padding: 6px 12px; }
 .phone-app-check[hidden] { display: none; }
 .phone-app-status { text-align: center; font-size: 12px; padding: 0 8px; }

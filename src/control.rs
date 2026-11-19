@@ -87,6 +87,24 @@ pub struct Controller {
     root: PathBuf,
 }
 impl Controller {
+    pub fn qa_profiles_idle(&mut self) -> Result<bool> {
+        Ok(self.manager.snapshot()?.iter().all(|s| {
+            matches!(
+                s.state,
+                crate::model::DeviceState::Stopped | crate::model::DeviceState::Crashed
+            )
+        }))
+    }
+    pub fn prepare_screen_capture(
+        &mut self,
+        id: &str,
+    ) -> std::result::Result<crate::android::ScreenCapture, ApiError> {
+        let id =
+            Uuid::parse_str(id).map_err(|_| crate::Error::Invalid("Invalid device ID".into()))?;
+        self.manager
+            .prepare_screen_capture(id)
+            .map_err(ApiError::from)
+    }
     pub fn sdk(&self) -> Sdk {
         self.sdk.clone()
     }

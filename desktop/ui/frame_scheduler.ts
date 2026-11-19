@@ -1,19 +1,20 @@
 /** Cooperative, bounded acquisition for visible device panels. */
 export class FrameScheduler {
-  private active: string | null = null;
+  private active = new Set<string>();
   private waiting: string[] = [];
+  constructor(private readonly capacity = 1) {}
 
   acquire(id: string): boolean {
-    if (this.active === id) return false;
+    if (this.active.has(id)) return false;
     if (!this.waiting.includes(id)) this.waiting.push(id);
-    if (this.active !== null || this.waiting[0] !== id) return false;
+    if (this.active.size >= this.capacity || this.waiting[0] !== id) return false;
     this.waiting.shift();
-    this.active = id;
+    this.active.add(id);
     return true;
   }
 
   release(id: string): void {
-    if (this.active === id) this.active = null;
+    this.active.delete(id);
   }
 
   cancel(id: string): void {

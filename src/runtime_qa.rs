@@ -105,8 +105,8 @@ fn verify(
             hardware_profile: hardware.clone(),
             ram_mb: 2048,
             cores: 2,
-            width: 720,
-            height: 1280,
+            width: if name.ends_with('A') { 1080 } else { 1440 },
+            height: if name.ends_with('A') { 2400 } else { 3120 },
             disk_mb: 2048,
             locale: "en-US".into(),
             graphics_mode: GraphicsMode::Auto,
@@ -155,6 +155,25 @@ fn verify(
         "Two independent guests booted in {:.1} seconds",
         started.elapsed().as_secs_f64()
     ));
+    // Exercise the same independent capture workers used by the desktop UI.
+    for round in 1..=5 {
+        let a = manager.prepare_screen_capture(ids[0])?;
+        let b = manager.prepare_screen_capture(ids[1])?;
+        let started = Instant::now();
+        let (a, b) = std::thread::scope(|scope| {
+            let a = scope.spawn(move || a.capture());
+            let b = scope.spawn(move || b.capture());
+            (a.join(), b.join())
+        });
+        let a = a.map_err(|_| Error::Runtime("Guest A capture worker failed".into()))??;
+        let b = b.map_err(|_| Error::Runtime("Guest B capture worker failed".into()))??;
+        report.checks.push(format!(
+            "Concurrent capture {round}: A {} bytes, B {} bytes, {} ms",
+            a.len(),
+            b.len(),
+            started.elapsed().as_millis()
+        ));
+    }
     for (index, id) in ids.iter().copied().enumerate() {
         let apps = manager.google_apps(id)?;
         report.checks.push(format!(

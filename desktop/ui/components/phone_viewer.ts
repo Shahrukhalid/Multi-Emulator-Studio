@@ -4,8 +4,8 @@ import { FrameScheduler, FrameMetrics } from '../frame_scheduler.js';
 import { LiveVideo } from '../live_video.js';
 
 export class PhoneViewer {
-  // One bounded capture at a time across the entire local workspace.
-  private static scheduler = new FrameScheduler();
+  // Two verified capture workers, with fair scheduling for additional phones.
+  private static scheduler = new FrameScheduler(2);
   private static nextPanel = 0;
   private readonly panelId = String(++PhoneViewer.nextPanel);
   private readonly metrics = new FrameMetrics();
@@ -30,18 +30,19 @@ export class PhoneViewer {
     this.element.className = 'phone-panel';
     this.element.innerHTML = `<section class="phone-viewer" role="region" aria-label="Android device screen">
       <header class="modal-title-bar"><h2 class="phone-title"></h2><button class="btn-overflow-menu phone-close" aria-label="Close">×</button></header>
-      <div class="phone-display"><p class="phone-status" role="status">Waiting for Android…</p><img class="phone-frame" alt="Live Android screen" draggable="false" hidden /><canvas class="phone-video-frame" aria-label="Experimental live video" hidden></canvas></div>
+      <div class="phone-shell"><div class="phone-display"><p class="phone-status" role="status">Waiting for Android…</p><img class="phone-frame" alt="Live Android screen" draggable="false" hidden /><canvas class="phone-video-frame" aria-label="Experimental live video" hidden></canvas></div>
       <nav class="phone-navigation" aria-label="Android navigation">
         <button data-key="back" aria-label="Back" title="Back" disabled>◁</button>
         <button data-key="home" aria-label="Home" title="Home" disabled>○</button>
         <button data-key="recents" aria-label="Recent apps" title="Recent apps" disabled>□</button>
-      </nav><div class="phone-hardware" aria-label="Device controls">
+      </nav></div><div class="phone-hardware" aria-label="Device controls">
         <button data-key="volume_down" disabled>Volume −</button>
         <button data-key="volume_up" disabled>Volume +</button>
         <button data-key="power" disabled>Power</button>
       </div><button class="phone-app-check" disabled>Check Play Store &amp; YouTube</button><button class="phone-app-check phone-youtube-store" hidden disabled>Get YouTube from Play Store</button><button class="phone-app-check phone-video-toggle" disabled>Try live video (30s)</button><p class="phone-app-status" role="status"></p><p class="phone-viewer-note" role="status">Local screen refresh · click to tap, drag to swipe</p><p class="phone-frame-metrics" aria-label="Screen refresh performance">Waiting for frames</p>
     </section>`;
     this.element.querySelector('.phone-title')!.textContent = device.spec.name;
+    this.setScreenShape(device.spec.width, device.spec.height);
     this.element.querySelector('.phone-close')!.addEventListener('click', onClose);
     this.element.querySelector('.phone-app-check')!.addEventListener('click', () => void this.checkApps());
     this.element.querySelector('.phone-youtube-store')!.addEventListener('click', () => void this.send({ action: 'open_youtube_store', id: this.device.id }));
@@ -69,6 +70,13 @@ export class PhoneViewer {
         void this.send({ action: 'navigate', id: this.device.id, key: button.dataset.key as NavigationKey });
       });
     });
+  }
+
+  private setScreenShape(width: number, height: number): void {
+    const ratio = width / height;
+    if (!Number.isFinite(ratio) || ratio <= 0) return;
+    this.element.style.setProperty('--phone-aspect', String(ratio));
+    this.element.style.setProperty('--phone-width', `${Math.round(560 * ratio)}px`);
   }
 
   begin(): void {
@@ -187,7 +195,7 @@ export class PhoneViewer {
     try {
       const bytes = await this.api.screenPng(this.device.id);
       if (this.closed || !this.visible || document.hidden) return;
-      if (!(bytes instanceof ArrayBuffer) || bytes.byteLength < 24 || bytes.byteLength > 16 * 1024 * 1024) throw new Error('Invalid screen response');
+      if (!(bytes instanceof ArrayBuffer) || bytes.byteLength < 24 || bytes.byteLength > 32 * 1024 * 1024) throw new Error('Invalid screen response');
       const header = new DataView(bytes);
       const frame = { width: header.getUint32(16), height: header.getUint32(20) };
       const src = URL.createObjectURL(new Blob([bytes], { type: 'image/png' }));
@@ -205,6 +213,7 @@ export class PhoneViewer {
         throw error;
       }
       this.frame = frame;
+      this.setScreenShape(frame.width, frame.height);
       this.failures = 0;
       image.hidden = false;
       status.textContent = '';
@@ -222,7 +231,7 @@ export class PhoneViewer {
       this.updateControls();
       // Keep the last frame visible but non-interactive during a transient failure.
       const message = (err as { message?: string }).message || String(err);
-      status.textContent = `Waiting for device: ${message.split('\n')[0].slice(0, 240)}`;
+      status.textContent = `Reconnecting screen… ${message.split('\n')[0].slice(0, 120)}`;
       const cached = (await this.api.health().catch(() => [])).find(s => s.id === this.device.id);
       const state = this.failures >= 3 && (cached?.state === 'stopped' || cached?.state === 'crashed')
         ? await this.api.getDeviceStatus(this.device.id).catch(() => null) : null;
@@ -241,7 +250,7 @@ export class PhoneViewer {
         this.checkedApps = true;
         void this.checkApps();
       }
-      this.schedule(this.failures ? Math.min(4000, 500 * 2 ** Math.min(this.failures, 3)) : 100);
+      this.schedule(this.failures ? Math.min(4000, 500 * 2 ** Math.min(this.failures, 3)) : 350);
     }
   }
 }

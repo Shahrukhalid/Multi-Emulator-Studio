@@ -2,6 +2,18 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { FrameScheduler, FrameMetrics } from './dist/ui/frame_scheduler.js';
 
+test('two devices capture independently while a third waits fairly', () => {
+  const scheduler = new FrameScheduler(2);
+  assert.equal(scheduler.acquire('A'), true);
+  assert.equal(scheduler.acquire('B'), true);
+  assert.equal(scheduler.acquire('A'), false);
+  assert.equal(scheduler.acquire('C'), false);
+  scheduler.release('B');
+  assert.equal(scheduler.acquire('C'), true);
+  scheduler.release('A');
+  scheduler.release('C');
+});
+
 test('visible device captures are exclusive and FIFO', () => {
   const scheduler = new FrameScheduler();
   assert.equal(scheduler.acquire('A'), true);

@@ -23,4 +23,4 @@ node desktop/release-readiness.mjs /path/to/candidate/evidence.json FULL_COMMIT 
 
 This tool checks completeness, platform/signing labels, exact commit/version and actual local artifact/report bytes. It does not independently prove a human attestation or authenticate signatures on another OS. Keep original reports and signature-verification output and inspect them before publication. Never mark a missing test as passed. No workflow automatically publishes or merges the project.
 
-Current blocker: M4.9 CI passed, but no clean physical-host QA result has been collected, native video is unfinished, and production signing is unavailable. A release check must still fail.
+Current blocker: M6 adds compact phone frames and concurrent screen capture workers. The isolated QA self-test exercises five concurrent full-resolution capture pairs and any connected SDK; using an existing SDK does not establish clean automatic setup. Physical-host reports on both platforms, native video playback, clean first-run setup, and production signing remain required. A release check must still fail until evidence is complete.

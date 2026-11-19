@@ -77,7 +77,7 @@ export class DeviceCardComponent {
     let statusLabel = 'Stopped';
     let statusDotClass = 'stopped';
     if (isRunning) {
-      statusLabel = 'Running';
+      statusLabel = this.status?.diagnostic ? 'Reconnecting' : 'Running';
       statusDotClass = 'ready';
     } else if (isStarting) {
       statusLabel = 'Starting...';
