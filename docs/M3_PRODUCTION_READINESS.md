@@ -151,3 +151,11 @@ No production merge or release until the applicable gates are verified. A CI-gen
 - M4.9 core and desktop CI completed successfully on both supported platform runners. Add exact-commit candidate manifests with artifact size and SHA-256; preserve development/unsigned labels and distinguish notarized candidates.
 - Add a fail-closed release evidence completeness and integrity check with tests for stale commits, missing runtime outcomes, unsigned packages and modified files. See `docs/RELEASE_READINESS.md`; the template intentionally contains pending values. Physical-host evidence and OS signature validation are still required and are not inferred from this script.
 - Native streaming and actual clean setup/guest verification remain open. Do not publish or merge a production release solely because CI passed.
+
+## M5.1–M5.5 — runtime, video and signing preparation
+
+- M5.1: the connected Mac still has only the Google APIs image and its official emulator version probe aborts with the Qt/NEON diagnostic in this restricted execution context. No physical guest boot is claimed. The isolated QA app is required for actual first-run and boot testing.
+- M5.2: implement opt-in experimental H.264 screen encoding through the selected managed guest, bounded local binary transfer, Annex-B parsing and WebCodecs decoding. Limit to two 30-second sessions; fall back to PNG on unsupported decoder, hidden screen, timeout or failure. No persistence or external stream listener. Synthetic H.264 parser and re-decode checks passed; native guest video and measured live desktop FPS remain unverified.
+- M5.3: extend the QA self-test with bounded checks for H.264 parameter sets and a keyframe, distinct from rendered playback. Clean macOS/Windows install and personal license review must happen on physical hosts.
+- M5.4: add a separate protected Windows Authenticode signing candidate workflow and documentation. Existing protected macOS notarization workflow retained. Neither production identity is configured or verified here.
+- M5.5: retain release evidence gate. No stable release or merge while physical acceptance, continuous video performance and production signature checks are missing.

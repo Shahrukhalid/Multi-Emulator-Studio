@@ -30,6 +30,7 @@ export interface IApiClient {
   managedSetupAnswer(yes: boolean): Promise<void>;
   cancelManagedSetup(): Promise<void>;
   screenPng(id: string): Promise<ArrayBuffer>;
+  videoRead(id: string, token: string): Promise<ArrayBuffer>;
   pickApk(): Promise<string | null>;
   pickSdkDirectory(): Promise<string | null>;
   dispatch<T>(request: Request): Promise<T>;
@@ -84,6 +85,7 @@ class TauriApiClient implements IApiClient {
   managedSetupAnswer(yes: boolean): Promise<void> { return this.invoke<void>('managed_setup_answer', { yes }); }
   cancelManagedSetup(): Promise<void> { return this.invoke<void>('cancel_managed_setup'); }
   screenPng(id: string): Promise<ArrayBuffer> { return this.invoke<ArrayBuffer>('screen_png', { id }); }
+  videoRead(id: string, token: string): Promise<ArrayBuffer> { return this.invoke<ArrayBuffer>('video_read', { id, token }); }
 
   pickApk(): Promise<string | null> {
     return this.invoke<string | null>('pick_apk');
@@ -227,6 +229,7 @@ class BrowserPreviewClient implements IApiClient {
   async managedSetupAnswer(_yes: boolean): Promise<void> { throw new Error('Setup requires the native app.'); }
   async cancelManagedSetup(): Promise<void> { throw new Error('Setup requires the native app.'); }
   async screenPng(_id: string): Promise<ArrayBuffer> { throw new Error('Screen capture requires the native app.'); }
+  async videoRead(_id: string, _token: string): Promise<ArrayBuffer> { throw new Error('Video requires the native app.'); }
 
   async pickApk(): Promise<string | null> {
     throw new Error('Native file selection requires the desktop app.');

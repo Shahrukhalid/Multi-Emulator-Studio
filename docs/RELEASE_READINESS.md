@@ -4,7 +4,7 @@ M5 introduces a release evidence gate, not a public release. Successful CI build
 
 ## Candidate artifacts
 
-Every desktop CI artifact contains `CANDIDATE.json` and `SHA256SUMS.txt`, generated from the packaged files. The manifest records exact build commit, application version, platform, signing category, filenames, lengths and SHA-256 checksums. Pull-request runs build the merge commit represented by `GITHUB_SHA`; don't attach evidence from a different source revision to those artifacts. Signed macOS candidates are generated only after the existing protected notarization checks succeed. The Windows CI installer is unsigned and cannot be treated as a production candidate.
+Every desktop CI artifact contains `CANDIDATE.json` and `SHA256SUMS.txt`, generated from the packaged files. The manifest records exact build commit, application version, platform, signing category, filenames, lengths and SHA-256 checksums. Pull-request runs build the merge commit represented by `GITHUB_SHA`; don't attach evidence from a different source revision to those artifacts. Signed macOS candidates are generated only after protected notarization checks succeed. The ordinary Windows CI installer is unsigned and cannot be treated as a production candidate; the protected [Windows signing workflow](WINDOWS_SIGNING.md) requires configured credentials and successful Authenticode verification.
 
 ## Required evidence per supported platform
 

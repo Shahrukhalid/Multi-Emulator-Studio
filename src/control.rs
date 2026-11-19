@@ -59,6 +59,13 @@ pub enum Request {
     Screen {
         id: Uuid,
     },
+    VideoStart {
+        id: Uuid,
+    },
+    VideoStop {
+        id: Uuid,
+        token: Uuid,
+    },
     GoogleApps {
         id: Uuid,
     },
@@ -87,6 +94,15 @@ impl Controller {
         let id =
             Uuid::parse_str(id).map_err(|_| crate::Error::Invalid("Invalid device ID".into()))?;
         self.manager.screen_png(id).map_err(ApiError::from)
+    }
+    pub fn video_read(&mut self, id: &str, token: &str) -> std::result::Result<Vec<u8>, ApiError> {
+        let parse = |text: &str| {
+            Uuid::parse_str(text)
+                .map_err(|_| crate::Error::Invalid("Invalid video identifier".into()))
+        };
+        self.manager
+            .video_read(parse(id)?, parse(token)?)
+            .map_err(ApiError::from)
     }
     pub fn open(root: &Path, sdk_root: Option<PathBuf>) -> Result<Self> {
         std::fs::create_dir_all(root)?;
@@ -155,6 +171,11 @@ impl Controller {
             }
             Request::Logs { id } => json!(self.manager.logs(id)?),
             Request::Screen { id } => json!(self.manager.screen(id)?),
+            Request::VideoStart { id } => json!(self.manager.video_start(id)?),
+            Request::VideoStop { id, token } => {
+                self.manager.video_stop(id, token)?;
+                json!(true)
+            }
             Request::GoogleApps { id } => json!(self.manager.google_apps(id)?),
             Request::OpenYoutubeStore { id } => {
                 self.manager.open_youtube_store(id)?;

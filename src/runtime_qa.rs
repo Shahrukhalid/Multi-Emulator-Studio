@@ -184,6 +184,27 @@ fn verify(
             index + 1,
             total / 5
         ));
+        let token = manager.video_start(id)?;
+        let sample = (|| -> Result<usize> {
+            let deadline = Instant::now() + Duration::from_secs(8);
+            let mut bytes = Vec::new();
+            while Instant::now() < deadline && bytes.len() < 2 * 1024 * 1024 {
+                let packet = manager.video_read(id, token)?;
+                match packet.first() {
+                    Some(1) => bytes.extend_from_slice(&packet[1..]),
+                    Some(2) => break,
+                    _ => std::thread::sleep(Duration::from_millis(20)),
+                }
+                if has_video_headers(&bytes) {
+                    return Ok(bytes.len());
+                }
+            }
+            Err(Error::Unavailable(
+                "Android encoder did not yield H.264 SPS, PPS and IDR sample".into(),
+            ))
+        })();
+        manager.video_stop(id, token)?;
+        report.checks.push(format!("Guest {}: H.264 encoder emitted headers and keyframe ({} bytes sampled; decoder playback not verified)", index + 1, sample?));
     }
     manager.stop(ids[0])?;
     if manager.status(ids[1])?.state != DeviceState::Ready {
@@ -193,6 +214,30 @@ fn verify(
     }
     report.checks.push("Independent shutdown verified".into());
     Ok(())
+}
+
+fn has_video_headers(bytes: &[u8]) -> bool {
+    let mut flags = [false; 3];
+    for window in bytes.windows(4) {
+        if window[..3] == [0, 0, 1] {
+            match window[3] & 31 {
+                7 => flags[0] = true,
+                8 => flags[1] = true,
+                5 => flags[2] = true,
+                _ => {}
+            }
+        }
+    }
+    flags.into_iter().all(|flag| flag)
+}
+
+#[cfg(test)]
+#[test]
+fn qa_video_checks_for_required_nal_types() {
+    assert!(!has_video_headers(&[0, 0, 1, 0x67]));
+    assert!(has_video_headers(&[
+        0, 0, 0, 1, 0x67, 0, 0, 1, 0x68, 0, 0, 1, 0x65
+    ]));
 }
 
 #[cfg(test)]

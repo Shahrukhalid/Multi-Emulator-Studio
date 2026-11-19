@@ -94,6 +94,8 @@ export type Request =
   | { action: 'emulator_version' }
   | { action: 'runtime_preflight' }
   | { action: 'screen'; id: string }
+  | { action: 'video_start'; id: string }
+  | { action: 'video_stop'; id: string; token: string }
   | { action: 'google_apps'; id: string }
   | { action: 'open_youtube_store'; id: string }
   | { action: 'navigate'; id: string; key: NavigationKey }

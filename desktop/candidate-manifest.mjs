@@ -7,6 +7,7 @@ const TARGETS = {
   'macos-arm64-development': { bundle: 'dmg', platform: 'macos-arm64', signing: 'ad-hoc', distribution: 'development' },
   'windows-x64-development': { bundle: 'nsis', platform: 'windows-x64', signing: 'unsigned', distribution: 'development' },
   'macos-arm64-signed': { bundle: 'dmg', platform: 'macos-arm64', signing: 'developer-id-notarized', distribution: 'signed-candidate' },
+  'windows-x64-signed': { bundle: 'nsis', platform: 'windows-x64', signing: 'authenticode-verified', distribution: 'signed-candidate' },
 };
 
 export async function writeCandidateManifest(bundleDir, target, commit, version) {

@@ -102,6 +102,19 @@ pub trait Engine {
             "Binary screen viewing is unavailable".into(),
         ))
     }
+    fn video_start(&mut self, _: &Device) -> Result<uuid::Uuid> {
+        Err(crate::Error::Unavailable(
+            "Video streaming unavailable".into(),
+        ))
+    }
+    fn video_read(&mut self, _: &Device, _: uuid::Uuid) -> Result<Vec<u8>> {
+        Err(crate::Error::Unavailable(
+            "Video streaming unavailable".into(),
+        ))
+    }
+    fn video_stop(&mut self, _: &Device, _: uuid::Uuid) -> Result<()> {
+        Ok(())
+    }
     fn google_apps(&mut self, _: &Device) -> Result<GoogleApps> {
         Err(crate::Error::Unavailable(
             "Google app verification is unavailable".into(),

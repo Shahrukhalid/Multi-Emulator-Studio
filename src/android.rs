@@ -510,6 +510,7 @@ pub struct Android {
     home: PathBuf,
     active: HashMap<Uuid, Instance>,
     crashed: HashMap<Uuid, String>,
+    video: HashMap<Uuid, crate::video::Capture>,
 }
 impl Android {
     pub fn new(sdk: Sdk, home: PathBuf) -> Result<Self> {
@@ -520,6 +521,7 @@ impl Android {
             home: home.canonicalize()?,
             active: HashMap::new(),
             crashed: HashMap::new(),
+            video: HashMap::new(),
         })
     }
     pub fn sdk(&self) -> &Sdk {
@@ -817,6 +819,7 @@ impl Engine for Android {
         })
     }
     fn status(&mut self, d: &Device) -> Result<Status> {
+        self.video.retain(|_, capture| !capture.expired());
         let Some(instance) = self.active.get_mut(&d.id) else {
             let state = if self.assert_idle(d).is_ok() {
                 if self.crashed.contains_key(&d.id) {
@@ -920,6 +923,7 @@ impl Engine for Android {
         })
     }
     fn stop(&mut self, d: &Device) -> Result<()> {
+        self.video.remove(&d.id);
         let Some(port) = self.active.get(&d.id).map(|i| i.port) else {
             self.assert_idle(d)?;
             self.crashed.remove(&d.id);
@@ -1003,6 +1007,50 @@ impl Engine for Android {
     fn screen_png(&mut self, d: &Device) -> Result<Vec<u8>> {
         let port = self.interactive_port(d)?;
         capture_png(self.adb_for(port).args(["exec-out", "screencap", "-p"]))
+    }
+    fn video_start(&mut self, d: &Device) -> Result<Uuid> {
+        self.video.retain(|_, capture| !capture.expired());
+        if self.video.contains_key(&d.id) || self.video.len() >= 2 {
+            return Err(Error::Conflict(
+                "At most two experimental video streams may run; close an existing stream".into(),
+            ));
+        }
+        let port = self.interactive_port(d)?;
+        let capture = crate::video::Capture::start(self.adb_for(port).args([
+            "exec-out",
+            "screenrecord",
+            "--output-format=h264",
+            "--time-limit",
+            "30",
+            "--bit-rate",
+            "2000000",
+            "-",
+        ]))?;
+        let token = capture.token;
+        self.video.insert(d.id, capture);
+        Ok(token)
+    }
+    fn video_read(&mut self, d: &Device, token: Uuid) -> Result<Vec<u8>> {
+        let capture = self
+            .video
+            .get_mut(&d.id)
+            .filter(|capture| capture.token == token)
+            .ok_or_else(|| Error::Unavailable("Video session ended".into()))?;
+        let bytes = capture.read();
+        if bytes[0] == 2 {
+            self.video.remove(&d.id);
+        }
+        Ok(bytes)
+    }
+    fn video_stop(&mut self, d: &Device, token: Uuid) -> Result<()> {
+        if self
+            .video
+            .get(&d.id)
+            .is_some_and(|capture| capture.token == token)
+        {
+            self.video.remove(&d.id);
+        }
+        Ok(())
     }
     fn google_apps(&mut self, d: &Device) -> Result<crate::runtime::GoogleApps> {
         let port = self.interactive_port(d)?;

@@ -1,6 +1,7 @@
 import { IApiClient } from '../api.js';
 import { Device, GoogleApps, NavigationKey, TouchInput } from '../types.js';
 import { FrameScheduler, FrameMetrics } from '../frame_scheduler.js';
+import { LiveVideo } from '../live_video.js';
 
 export class PhoneViewer {
   // One bounded capture at a time across the entire local workspace.
@@ -13,6 +14,7 @@ export class PhoneViewer {
   private timer: number | null = null;
   private frame: { width: number; height: number } | null = null;
   private frameUrl: string | null = null;
+  private video: LiveVideo | null = null;
   private visible = false;
   private observer: IntersectionObserver | null = null;
   private busy = false;
@@ -22,13 +24,13 @@ export class PhoneViewer {
   private checkedApps = false;
   private apps: GoogleApps | null = null;
   private start: { x: number; y: number; width: number; height: number } | null = null;
-  private visibilityChanged = () => { this.metrics.reset(); this.schedule(0); };
+  private visibilityChanged = () => { this.metrics.reset(); if (document.hidden) this.stopVideo('Video paused while hidden.'); this.schedule(0); };
 
   constructor(private api: IApiClient, private device: Device, onClose: () => void) {
     this.element.className = 'phone-panel';
     this.element.innerHTML = `<section class="phone-viewer" role="region" aria-label="Android device screen">
       <header class="modal-title-bar"><h2 class="phone-title"></h2><button class="btn-overflow-menu phone-close" aria-label="Close">×</button></header>
-      <div class="phone-display"><p class="phone-status" role="status">Waiting for Android…</p><img class="phone-frame" alt="Live Android screen" draggable="false" hidden /></div>
+      <div class="phone-display"><p class="phone-status" role="status">Waiting for Android…</p><img class="phone-frame" alt="Live Android screen" draggable="false" hidden /><canvas class="phone-video-frame" aria-label="Experimental live video" hidden></canvas></div>
       <nav class="phone-navigation" aria-label="Android navigation">
         <button data-key="back" aria-label="Back" title="Back" disabled>◁</button>
         <button data-key="home" aria-label="Home" title="Home" disabled>○</button>
@@ -37,13 +39,14 @@ export class PhoneViewer {
         <button data-key="volume_down" disabled>Volume −</button>
         <button data-key="volume_up" disabled>Volume +</button>
         <button data-key="power" disabled>Power</button>
-      </div><button class="phone-app-check" disabled>Check Play Store &amp; YouTube</button><button class="phone-app-check phone-youtube-store" hidden disabled>Get YouTube from Play Store</button><p class="phone-app-status" role="status"></p><p class="phone-viewer-note" role="status">Local screen refresh · click to tap, drag to swipe</p><p class="phone-frame-metrics" aria-label="Screen refresh performance">Waiting for frames</p>
+      </div><button class="phone-app-check" disabled>Check Play Store &amp; YouTube</button><button class="phone-app-check phone-youtube-store" hidden disabled>Get YouTube from Play Store</button><button class="phone-app-check phone-video-toggle" disabled>Try live video (30s)</button><p class="phone-app-status" role="status"></p><p class="phone-viewer-note" role="status">Local screen refresh · click to tap, drag to swipe</p><p class="phone-frame-metrics" aria-label="Screen refresh performance">Waiting for frames</p>
     </section>`;
     this.element.querySelector('.phone-title')!.textContent = device.spec.name;
     this.element.querySelector('.phone-close')!.addEventListener('click', onClose);
     this.element.querySelector('.phone-app-check')!.addEventListener('click', () => void this.checkApps());
     this.element.querySelector('.phone-youtube-store')!.addEventListener('click', () => void this.send({ action: 'open_youtube_store', id: this.device.id }));
-    const image = this.element.querySelector('.phone-frame') as HTMLImageElement;
+    this.element.querySelector('.phone-video-toggle')!.addEventListener('click', () => this.video ? this.stopVideo('PNG refresh restored.') : this.startVideo());
+    for (const image of Array.from(this.element.querySelectorAll<HTMLElement>('.phone-frame, .phone-video-frame'))) {
     image.addEventListener('pointerdown', e => {
       if (!this.frame || this.busy || e.button !== 0) return;
       this.start = { ...this.point(e, image), width: this.frame.width, height: this.frame.height };
@@ -60,6 +63,7 @@ export class PhoneViewer {
         : { kind: 'swipe', x: start.x, y: start.y, end_x: end.x, end_y: end.y };
       void this.send({ action: 'touch', id: this.device.id, input });
     });
+    }
     this.element.querySelectorAll<HTMLButtonElement>('[data-key]').forEach(button => {
       button.addEventListener('click', () => {
         void this.send({ action: 'navigate', id: this.device.id, key: button.dataset.key as NavigationKey });
@@ -71,13 +75,14 @@ export class PhoneViewer {
     document.addEventListener('visibilitychange', this.visibilityChanged);
     this.observer = new IntersectionObserver(entries => {
       this.visible = entries.some(entry => entry.isIntersecting);
-      if (!this.visible) this.metrics.reset();
+      if (!this.visible) { this.metrics.reset(); this.stopVideo('Video paused while hidden.'); }
       this.schedule(0);
     });
     this.observer.observe(this.element);
   }
   dispose(): void {
     this.closed = true;
+    this.stopVideo('');
     PhoneViewer.scheduler.cancel(this.panelId);
     this.observer?.disconnect();
     if (this.frameUrl) URL.revokeObjectURL(this.frameUrl);
@@ -88,7 +93,7 @@ export class PhoneViewer {
   private schedule(delay: number): void {
     if (this.timer !== null) window.clearTimeout(this.timer);
     this.timer = null;
-    if (this.closed || this.terminal || !this.visible || document.hidden || this.busy || this.capturing) {
+    if (this.closed || this.terminal || !this.visible || document.hidden || this.busy || this.capturing || this.video) {
       PhoneViewer.scheduler.cancel(this.panelId);
       return;
     }
@@ -103,6 +108,39 @@ export class PhoneViewer {
     const store = this.element.querySelector('.phone-youtube-store') as HTMLButtonElement;
     store.hidden = !this.apps?.play_store || !!this.apps.youtube;
     store.disabled = !this.frame || this.busy;
+    const video = this.element.querySelector('.phone-video-toggle') as HTMLButtonElement;
+    video.disabled = !this.video && (!this.frame || this.busy || this.capturing || !this.visible);
+    video.textContent = this.video ? 'Stop live video' : 'Try live video (30s)';
+  }
+
+  private startVideo(): void {
+    if (this.video || !this.frame || this.closed || this.busy || this.capturing || !this.visible || document.hidden) return;
+    const canvas = this.element.querySelector<HTMLCanvasElement>('.phone-video-frame')!;
+    const image = this.element.querySelector<HTMLImageElement>('.phone-frame')!;
+    const native = this.frame;
+    const stream = new LiveVideo(this.api, this.device.id, canvas, (width, height, fps) => {
+      if (this.video !== stream || this.closed) return;
+      if (Math.abs(width / height - native.width / native.height) > 0.03) { this.stopVideo('Screen orientation changed; PNG refresh restored.'); return; }
+      canvas.hidden = false; image.hidden = true;
+      this.element.querySelector('.phone-frame-metrics')!.textContent = `Experimental video · ${fps === null ? 'Measuring' : fps.toFixed(1) + ' decoded frames/s'}`;
+    }, reason => { if (this.video === stream) this.stopVideo(reason); });
+    this.video = stream;
+    this.start = null;
+    this.schedule(0);
+    this.updateControls();
+    this.element.querySelector('.phone-viewer-note')!.textContent = 'Starting experimental encoded video…';
+    void stream.start();
+  }
+
+  private stopVideo(reason: string): void {
+    if (!this.video) return;
+    const stream = this.video; this.video = null;
+    stream.stop();
+    this.start = null;
+    this.element.querySelector<HTMLCanvasElement>('.phone-video-frame')!.hidden = true;
+    this.element.querySelector<HTMLImageElement>('.phone-frame')!.hidden = !this.frame;
+    this.element.querySelector('.phone-viewer-note')!.textContent = reason || 'Local screen refresh';
+    this.metrics.reset(); this.updateControls(); this.schedule(0);
   }
 
   private async checkApps(): Promise<void> {
@@ -119,7 +157,7 @@ export class PhoneViewer {
     finally { this.busy = false; this.updateControls(); this.schedule(0); }
   }
 
-  private point(e: PointerEvent, image: HTMLImageElement): { x: number; y: number } {
+  private point(e: PointerEvent, image: HTMLElement): { x: number; y: number } {
     const box = image.getBoundingClientRect();
     const { width, height } = this.frame!;
     return { x: Math.max(0, Math.min(width - 1, Math.floor((e.clientX - box.left) / box.width * width))), y: Math.max(0, Math.min(height - 1, Math.floor((e.clientY - box.top) / box.height * height))) };
@@ -137,7 +175,7 @@ export class PhoneViewer {
   }
 
   private async refresh(): Promise<void> {
-    if (this.closed || this.terminal || !this.visible || this.capturing || this.busy || document.hidden) {
+    if (this.closed || this.terminal || !this.visible || this.capturing || this.busy || document.hidden || this.video) {
       PhoneViewer.scheduler.cancel(this.panelId);
       return;
     }

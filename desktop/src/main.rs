@@ -291,6 +291,28 @@ async fn install_google_play(state: State<'_, Shared>) -> Result<(), ApiError> {
 }
 
 #[tauri::command]
+async fn video_read(
+    id: String,
+    token: String,
+    state: State<'_, Shared>,
+) -> Result<tauri::ipc::Response, ApiError> {
+    let s = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        // A busy lifecycle/status operation must not queue frame reads or block the UI.
+        let Ok(mut guard) = s.try_lock() else {
+            return Ok(tauri::ipc::Response::new(vec![0u8]));
+        };
+        let bytes = guard
+            .as_mut()
+            .ok_or_else(|| setup_error("Connect SDK first"))?
+            .video_read(&id, &token)?;
+        Ok(tauri::ipc::Response::new(bytes))
+    })
+    .await
+    .map_err(|e| setup_error(&e.to_string()))?
+}
+
+#[tauri::command]
 async fn screen_png(
     id: String,
     state: State<'_, Shared>,
@@ -449,6 +471,7 @@ fn main() {
             install_android_runtime,
             install_google_play,
             screen_png,
+            video_read,
             pick_apk,
             pick_sdk_directory,
             dispatch,

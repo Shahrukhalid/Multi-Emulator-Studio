@@ -133,6 +133,15 @@ impl<E: Engine> Manager<E> {
     pub fn screen_png(&mut self, id: Uuid) -> Result<Vec<u8>> {
         self.engine.screen_png(&self.store.get(id)?)
     }
+    pub fn video_start(&mut self, id: Uuid) -> Result<Uuid> {
+        self.engine.video_start(&self.store.get(id)?)
+    }
+    pub fn video_read(&mut self, id: Uuid, token: Uuid) -> Result<Vec<u8>> {
+        self.engine.video_read(&self.store.get(id)?, token)
+    }
+    pub fn video_stop(&mut self, id: Uuid, token: Uuid) -> Result<()> {
+        self.engine.video_stop(&self.store.get(id)?, token)
+    }
     pub fn google_apps(&mut self, id: Uuid) -> Result<crate::runtime::GoogleApps> {
         self.engine.google_apps(&self.store.get(id)?)
     }

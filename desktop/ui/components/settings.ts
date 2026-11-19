@@ -118,7 +118,7 @@ export class SettingsComponent {
 
       ${this.connected && this.dataDir.endsWith('com.nexonic.multiemulatorstudio.qa') ? `<div class="settings-card">
         <h3 class="settings-card-title">Native runtime self-test</h3>
-        <p class="form-helper-text">Boot two disposable Android devices, check Google Play and YouTube, capture screens, and verify independent shutdown. Close any other running emulators before starting. May take several minutes.</p>
+        <p class="form-helper-text">Boot two disposable Android devices, check Google Play and YouTube, sample PNG and H.264 encoder output, and verify independent shutdown. Close any other running emulators before starting. May take several minutes.</p>
         <button class="nav-item" id="qa-run" ${this.qaRunning || this.installing ? 'disabled' : ''}>${this.qaRunning ? 'Running native checks…' : 'Run two-device test'}</button>
         <pre id="qa-report" style="white-space:pre-wrap;max-height:260px;overflow:auto" role="status"></pre>
         <div id="qa-evidence-panel" hidden>
