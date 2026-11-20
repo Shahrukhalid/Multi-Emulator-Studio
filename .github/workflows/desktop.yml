@@ -1,6 +1,8 @@
 name: Desktop checks
 on:
   pull_request:
+  push:
+    branches: [main]
   workflow_dispatch:
     inputs:
       signed_macos:
@@ -60,6 +62,7 @@ jobs:
       - run: cargo +stable fmt --check
       - run: cargo +stable clippy --locked --all-targets -- -D warnings
       - run: cargo +stable test --locked
+      - run: cargo +stable test --locked --manifest-path ../Cargo.toml
       - run: cargo install cargo-audit --locked
       - run: cargo audit
       - run: cargo install tauri-cli --version 2.12.4 --locked
@@ -163,3 +166,81 @@ jobs:
             desktop/target/release/bundle/CANDIDATE.json
           if-no-files-found: error
           retention-days: 14
+
+  publish-development:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: desktop
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: development-adhoc-macOS-ARM64
+          path: candidates/macos
+      - uses: actions/download-artifact@v4
+        with:
+          name: development-unsigned-Windows-X64
+          path: candidates/windows
+      - name: Verify exact source and development artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          for platform in macos windows; do
+            (cd "candidates/$platform" && sha256sum -c SHA256SUMS.txt)
+          done
+          node --input-type=module <<'NODE'
+          import { readFileSync, statSync, createReadStream } from 'node:fs';
+          import { createHash } from 'node:crypto';
+          import { resolve, relative, isAbsolute } from 'node:path';
+          const targets = [
+            ['macos', 'macos-arm64', 'ad-hoc', '.dmg'],
+            ['windows', 'windows-x64', 'unsigned', '.exe']
+          ];
+          let version;
+          for (const [dir, platform, signing, ext] of targets) {
+            const root = resolve('candidates', dir);
+            const manifest = JSON.parse(readFileSync(resolve(root, 'CANDIDATE.json'), 'utf8'));
+            if (manifest.schema !== 1 || manifest.product !== 'Multi-Emulator Studio' ||
+                manifest.commit !== process.env.GITHUB_SHA || manifest.platform !== platform ||
+                manifest.signing !== signing || manifest.distribution !== 'development' ||
+                !/^\d+\.\d+\.\d+$/.test(manifest.version) || (version && version !== manifest.version) ||
+                !Array.isArray(manifest.artifacts) || !manifest.artifacts.length) {
+              throw new Error('Invalid development manifest: ' + dir);
+            }
+            version = manifest.version;
+            for (const item of manifest.artifacts) {
+              const path = resolve(root, item.path);
+              const rel = relative(root, path);
+              if (!rel || rel.startsWith('..') || isAbsolute(rel) || !path.endsWith(ext) ||
+                  !statSync(path).isFile() || statSync(path).size !== item.bytes || item.bytes <= 0) {
+                throw new Error('Invalid installer path or size');
+              }
+              const hash = createHash('sha256');
+              for await (const chunk of createReadStream(path)) hash.update(chunk);
+              if (hash.digest('hex') !== item.sha256) throw new Error('Installer hash mismatch');
+            }
+          }
+          NODE
+          (cd candidates/macos && zip -qr ../../Multi-Emulator-Studio-macOS-ARM64-development.zip .)
+          (cd candidates/windows && zip -qr ../../Multi-Emulator-Studio-Windows-X64-development.zip .)
+          sha256sum Multi-Emulator-Studio-*-development.zip > SHA256SUMS.txt
+      - name: Publish development prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(node -p "require('./candidates/macos/CANDIDATE.json').version")
+          tag="v${version}-dev.${GITHUB_SHA:0:12}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "Development prerelease already exists: $tag"
+            exit 0
+          fi
+          gh release create "$tag" --target "$GITHUB_SHA" --prerelease --latest=false \
+            --title "Multi-Emulator Studio $version — development preview" \
+            --notes "Automated development preview for commit $GITHUB_SHA. CI and package integrity passed. macOS is ad-hoc signed; Windows is unsigned. Native two-device acceptance, clean setup, and production signing are not verified. Not a stable production release." \
+            Multi-Emulator-Studio-macOS-ARM64-development.zip \
+            Multi-Emulator-Studio-Windows-X64-development.zip SHA256SUMS.txt
