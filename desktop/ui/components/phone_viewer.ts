@@ -1,6 +1,6 @@
 import { IApiClient } from '../api.js';
 import { Device, GoogleApps, NavigationKey, TouchInput } from '../types.js';
-import { FrameScheduler, FrameMetrics } from '../frame_scheduler.js';
+import { FrameScheduler, FrameMetrics, nextCaptureDelay } from '../frame_scheduler.js';
 import { LiveVideo } from '../live_video.js';
 
 export class PhoneViewer {
@@ -250,7 +250,7 @@ export class PhoneViewer {
         this.checkedApps = true;
         void this.checkApps();
       }
-      this.schedule(this.failures ? Math.min(4000, 500 * 2 ** Math.min(this.failures, 3)) : 350);
+      this.schedule(nextCaptureDelay(performance.now() - started, this.failures));
     }
   }
 }

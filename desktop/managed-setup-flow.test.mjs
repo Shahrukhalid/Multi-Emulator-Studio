@@ -5,6 +5,22 @@ import { ManagedSetupFlow } from './dist/ui/managed_setup_flow.js';
 const tick = () => new Promise(resolve => setImmediate(resolve));
 const status = (output, awaiting_answer = false, done = false, success = false) => ({ output, awaiting_answer, done, success });
 
+test('installed packages do not report ready if runtime connection fails', async () => {
+  let cancelled = false;
+  const flow = new ManagedSetupFlow({
+    onManagedStart: async () => '/private/sdk',
+    onManagedStatus: async () => status('Installed', false, true, true),
+    onManagedAnswer: async () => { throw new Error('unexpected license response'); },
+    onManagedCancel: async () => { cancelled = true; },
+    onManagedConnect: async () => { throw new Error('runtime compatibility probe failed'); },
+  }, () => {}, tick);
+  await flow.start();
+  assert.equal(flow.snapshot.phase, 'failed');
+  assert.match(flow.snapshot.message, /runtime compatibility probe failed/);
+  assert.equal(flow.snapshot.output, 'Installed');
+  assert.equal(cancelled, false);
+});
+
 test('setup preserves output and requires explicit responses for each license', async () => {
   const answers = [];
   let connected = null;

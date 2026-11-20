@@ -43,6 +43,7 @@ export class DeviceListComponent {
     if (card) {
       card.updateStatus(status);
     }
+    this.updateSummary();
   }
 
   setDeviceBusy(id: string, busy: boolean): void {
@@ -54,10 +55,14 @@ export class DeviceListComponent {
 
   private render(): void {
     this.element.innerHTML = `
+      <section class="workspace-overview" aria-label="Device workspace overview">
+        <div class="workspace-intro"><span class="workspace-kicker">YOUR WORKSPACE</span><h1>My devices</h1><p>Launch, manage and interact with your virtual Android devices.</p></div>
+        <div class="workspace-stats"><div class="workspace-stat"><span>Devices</span><strong id="stat-devices">0</strong></div><div class="workspace-stat"><span>Ready</span><strong id="stat-ready">0</strong></div><div class="workspace-stat"><span>Starting / queued</span><strong id="stat-queued">0</strong></div></div>
+      </section>
       <div class="toolbar-bar">
         <div class="search-field">
           ${Icons.search}
-          <input type="text" id="devices-search-input" placeholder="Search devices by name or version..." />
+          <input type="text" id="devices-search-input" aria-label="Search devices" placeholder="Search devices by name or version..." />
         </div>
 
         <div class="view-mode-toggle">
@@ -99,6 +104,7 @@ export class DeviceListComponent {
   }
 
   private updateGrid(): void {
+    this.updateSummary();
     const gridContainer = this.element.querySelector('#devices-cards-grid');
     if (!gridContainer) return;
 
@@ -133,6 +139,16 @@ export class DeviceListComponent {
       const card = new DeviceCardComponent(d, statusMap.get(d.id) ?? null, this.callbacks);
       this.cardInstances.set(d.id, card);
       gridContainer.appendChild(card.getElement());
+    }
+  }
+
+  private updateSummary(): void {
+    const known = new Set(this.devices.map(device => device.id));
+    const statuses = this.statuses.filter(status => known.has(status.id));
+    const counts = { 'stat-devices': this.devices.length, 'stat-ready': statuses.filter(status => status.state === 'ready' && !status.diagnostic).length, 'stat-queued': statuses.filter(status => status.state === 'starting' || status.state === 'queued').length };
+    for (const [id, value] of Object.entries(counts)) {
+      const element = this.element.querySelector(`#${id}`);
+      if (element) element.textContent = String(value);
     }
   }
 

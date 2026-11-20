@@ -29,8 +29,10 @@ export class HeaderComponent {
       const target = item.getAttribute('data-tab');
       if (target === tab) {
         item.classList.add('active');
+        item.setAttribute('aria-current', 'page');
       } else {
         item.classList.remove('active');
+        item.removeAttribute('aria-current');
       }
     });
   }
@@ -49,10 +51,10 @@ export class HeaderComponent {
           <div class="brand-icon-box">
             ${Icons.android}
           </div>
-          <span class="brand-name">Multi-Emulator Studio</span>
+          <div class="brand-label"><span class="brand-name">Multi-Emulator Studio</span><span class="brand-subtitle">Android workspace</span></div>
         </div>
 
-        <nav class="primary-nav">
+        <nav class="primary-nav" aria-label="Studio navigation">
           <button class="nav-item ${this.props.activeTab === 'devices' ? 'active' : ''}" data-tab="devices">
             ${Icons.devices}
             <span>My Devices</span>
@@ -75,6 +77,7 @@ export class HeaderComponent {
         </div>
       </div>
     `;
+    this.setTab(this.props.activeTab);
 
     this.element.querySelectorAll('.nav-item').forEach((btn) => {
       btn.addEventListener('click', () => {

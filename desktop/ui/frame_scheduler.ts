@@ -45,3 +45,10 @@ export class FrameMetrics {
     };
   }
 }
+
+/** Faster on responsive hosts, back off when capture itself is expensive. */
+export function nextCaptureDelay(latencyMs: number, failures: number): number {
+  if (failures > 0) return Math.min(4000, 500 * 2 ** Math.min(failures, 3));
+  if (!Number.isFinite(latencyMs) || latencyMs < 0) return 350;
+  return Math.round(Math.max(120, Math.min(1000, latencyMs / 2)));
+}

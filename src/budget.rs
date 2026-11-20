@@ -38,4 +38,25 @@ mod tests {
         assert!(b.fits([s.clone()].into_iter(), &s));
         assert!(!b.fits([s.clone(), s.clone()].into_iter(), &s));
     }
+
+    #[test]
+    fn admission_reserves_host_capacity_and_rejects_unknown_memory() {
+        let mut host = Host {
+            os: "macos",
+            arch: "aarch64",
+            cores: 10,
+            ram_mb: Some(16384),
+            supported: true,
+        };
+        let budget = Budget::from_host(&host).unwrap();
+        assert_eq!(budget.cores, 8);
+        assert_eq!(budget.ram_mb, 10923);
+        let mut spec = crate::model::sample();
+        spec.ram_mb = 2048;
+        spec.cores = 2;
+        assert!(budget.fits(vec![spec.clone(); 3].into_iter(), &spec));
+        assert!(!budget.fits(vec![spec.clone(); 4].into_iter(), &spec));
+        host.ram_mb = None;
+        assert!(Budget::from_host(&host).is_err());
+    }
 }

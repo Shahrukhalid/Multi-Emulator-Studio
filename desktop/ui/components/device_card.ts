@@ -142,6 +142,7 @@ export class DeviceCardComponent {
           <span>${statusLabel}</span>
         </div>
       </div>
+      <div class="device-spec-strip"><span>${spec.ram_mb} MB RAM</span><span>${spec.cores} vCPU</span><span>${spec.width} × ${spec.height}</span></div>
 
       <div class="device-card-footer">
         ${primaryBtnHtml}

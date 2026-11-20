@@ -1,6 +1,15 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { FrameScheduler, FrameMetrics } from './dist/ui/frame_scheduler.js';
+import { FrameScheduler, FrameMetrics, nextCaptureDelay } from './dist/ui/frame_scheduler.js';
+
+test('capture cadence adapts to measured latency without unbounded polling', () => {
+  assert.equal(nextCaptureDelay(20, 0), 120);
+  assert.equal(nextCaptureDelay(700, 0), 350);
+  assert.equal(nextCaptureDelay(5000, 0), 1000);
+  assert.equal(nextCaptureDelay(20, 1), 1000);
+  assert.equal(nextCaptureDelay(20, 20), 4000);
+  assert.equal(nextCaptureDelay(NaN, 0), 350);
+});
 
 test('two devices capture independently while a third waits fairly', () => {
   const scheduler = new FrameScheduler(2);

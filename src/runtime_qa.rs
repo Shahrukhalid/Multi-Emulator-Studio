@@ -1,6 +1,7 @@
 //! User-initiated, disposable two-device runtime verification.
 use crate::{
     android::{Android, Sdk},
+    budget::Budget,
     manager::Manager,
     model::{DeviceSpec, DeviceState, GraphicsMode},
     runtime::NavigationKey,
@@ -22,6 +23,15 @@ pub struct QaReport {
 
 pub fn run(sdk: Sdk, data: &Path) -> QaReport {
     let mut report = QaReport::default();
+    let host = crate::host::detect();
+    report.checks.push(format!(
+        "Host {} {}: {} logical cores, RAM {:?} MiB, free disk {:?} MiB",
+        host.os,
+        host.arch,
+        host.cores,
+        host.ram_mb,
+        crate::host::disk_free_mb(data)
+    ));
     let preflight = sdk.preflight();
     if !preflight.ready {
         report.failure = Some(preflight.diagnostic);
@@ -98,6 +108,11 @@ fn verify(
         .find(|profile| profile.as_str() == "pixel_6")
         .ok_or_else(|| Error::Unavailable("Pixel 6 hardware profile unavailable".into()))?
         .clone();
+    let budget = Budget::from_host(&crate::host::detect())?;
+    report.checks.push(format!(
+        "Admission budget: {} MiB RAM and {} cores (reservations, not measured consumption)",
+        budget.ram_mb, budget.cores
+    ));
     for name in ["QA phone A", "QA phone B"] {
         let device = manager.create(DeviceSpec {
             name: name.into(),
@@ -232,6 +247,42 @@ fn verify(
         ));
     }
     report.checks.push("Independent shutdown verified".into());
+    // Restart the same disposable profile while its sibling remains running.
+    let before = manager
+        .list()?
+        .into_iter()
+        .find(|d| d.id == ids[0])
+        .ok_or_else(|| Error::Runtime("Missing QA profile after shutdown".into()))?;
+    let restarted = manager.start(ids[0])?;
+    if restarted.state != DeviceState::Starting {
+        return Err(Error::Runtime("QA profile could not restart".into()));
+    }
+    let deadline = Instant::now() + Duration::from_secs(300);
+    loop {
+        let state = manager.status(ids[0])?;
+        if state.state == DeviceState::Ready {
+            break;
+        }
+        if state.state != DeviceState::Starting {
+            return Err(Error::Runtime(
+                state
+                    .diagnostic
+                    .unwrap_or_else(|| "QA restart failed".into()),
+            ));
+        }
+        if Instant::now() >= deadline {
+            return Err(Error::Timeout("QA profile restart".into()));
+        }
+        std::thread::sleep(Duration::from_secs(2));
+    }
+    let after = manager.list()?.into_iter().find(|d| d.id == ids[0]);
+    if after.as_ref() != Some(&before) || manager.status(ids[1])?.state != DeviceState::Ready {
+        return Err(Error::Runtime(
+            "Profile changed or sibling stopped during restart".into(),
+        ));
+    }
+    manager.screen_png(ids[0])?;
+    report.checks.push("Same profile identity and settings retained after restart; sibling remained ready (guest app-data persistence not verified)".into());
     Ok(())
 }
 
