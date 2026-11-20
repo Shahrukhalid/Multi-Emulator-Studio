@@ -1,0 +1,25 @@
+{
+  "schema": 1,
+  "commit": "",
+  "version": "0.1.0",
+  "platforms": [
+    {
+      "platform": "macos-arm64",
+      "signing": "pending",
+      "owner_reviewed": false,
+      "checks": {"clean_install":"pending","license_review":"pending","two_device_boot":"pending","play_store":"pending","youtube_preinstalled":"pending","navigation":"pending","independent_shutdown":"pending","persistence":"pending","screen_performance":"pending","native_video":"pending","upgrade_preservation":"pending"},
+      "artifact": {"path":"","sha256":""},
+      "manifest": {"path":"","sha256":""},
+      "report": {"path":"","sha256":""}
+    },
+    {
+      "platform": "windows-x64",
+      "signing": "pending",
+      "owner_reviewed": false,
+      "checks": {"clean_install":"pending","license_review":"pending","two_device_boot":"pending","play_store":"pending","youtube_preinstalled":"pending","navigation":"pending","independent_shutdown":"pending","persistence":"pending","screen_performance":"pending","native_video":"pending","upgrade_preservation":"pending"},
+      "artifact": {"path":"","sha256":""},
+      "manifest": {"path":"","sha256":""},
+      "report": {"path":"","sha256":""}
+    }
+  ]
+}

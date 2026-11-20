@@ -1,0 +1,7 @@
+# Windows signed candidates
+
+Ordinary CI still produces unsigned development NSIS installers. A separate protected manual workflow can produce a signed candidate only when the owner provides a trusted code-signing identity compatible with the PFX import method. Modern hardware-backed or cloud signing providers may require their own authorized integration; do not export or extract private keys contrary to provider requirements.
+
+Create a protected GitHub environment named `windows-signing`, restrict it to reviewed candidate branches, and require owner approval where available. If the provider legitimately supports an exportable PFX, configure environment secrets `WINDOWS_CERTIFICATE` (base64 PKCS#12), `WINDOWS_CERTIFICATE_PASSWORD`, and `WINDOWS_SIGNING_THUMBPRINT` (expected certificate thumbprint). Never commit these files or values. Dispatch Desktop checks with `signed_windows` enabled. The workflow will build with the expected certificate, request SHA-256 timestamped signing, verify Authenticode status, certificate identity and timestamp for the application executable and NSIS installer, generate checksums and upload a signed candidate. Missing credentials or failed verification prevents upload. The runner is ephemeral, and temporary certificate material is removed at exit.
+
+This path is implemented but has not been executed with production credentials. Signing alone does not certify native boot or clean installation. See [release readiness](RELEASE_READINESS.md).
