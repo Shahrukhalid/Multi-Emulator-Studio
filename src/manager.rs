@@ -34,6 +34,10 @@ impl Manager<crate::android::Android> {
     pub fn prepare_screen_capture(&mut self, id: Uuid) -> Result<crate::android::ScreenCapture> {
         self.engine.prepare_screen_capture(&self.store.get(id)?)
     }
+    pub(crate) fn qa_persistence_marker(&mut self, id: Uuid, write: bool) -> Result<()> {
+        self.engine
+            .qa_persistence_marker(&self.store.get(id)?, write)
+    }
 }
 impl<E: Engine> Manager<E> {
     pub fn open(root: &Path, engine: E) -> Result<Self> {

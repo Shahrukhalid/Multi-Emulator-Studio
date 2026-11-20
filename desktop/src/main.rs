@@ -62,6 +62,10 @@ async fn qa_runtime_check(
         }
         let mut report = multi_emulator_core::runtime_qa::run(sdk, &data);
         report.checks.insert(0, if managed { "Private managed SDK used; clean first-run license and installation still require separate evidence" } else { "Existing SDK used; automatic first-run installation NOT verified" }.into());
+        match multi_emulator_core::runtime_qa::save_report(&data, &report) {
+            Ok(path) => report.checks.push(format!("Local QA report saved: {}", path.display())),
+            Err(error) => report.checks.push(format!("Unable to save QA report locally; copy it from Settings: {error}")),
+        }
         Ok(report)
     })
     .await

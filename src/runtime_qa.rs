@@ -21,6 +21,36 @@ pub struct QaReport {
     pub cleanup_errors: Vec<String>,
 }
 
+/// Retain each local QA result, including failures, without replacing earlier evidence.
+pub fn save_report(data: &Path, report: &QaReport) -> Result<std::path::PathBuf> {
+    use std::io::Write;
+    let mut file = tempfile::Builder::new()
+        .prefix("qa-report-")
+        .suffix(".json")
+        .tempfile_in(data)?;
+    serde_json::to_writer_pretty(&mut file, report)?;
+    file.write_all(b"\n")?;
+    file.as_file().sync_all()?;
+    let (_, path) = file.keep().map_err(|err| err.error)?;
+    Ok(path)
+}
+
+#[cfg(test)]
+#[test]
+fn qa_reports_retain_failed_attempts_without_overwriting() {
+    let dir = tempfile::tempdir().unwrap();
+    let report = QaReport {
+        failure: Some("preflight failed".into()),
+        ..QaReport::default()
+    };
+    let first = save_report(dir.path(), &report).unwrap();
+    let second = save_report(dir.path(), &report).unwrap();
+    assert_ne!(first, second);
+    let json: serde_json::Value = serde_json::from_slice(&std::fs::read(first).unwrap()).unwrap();
+    assert_eq!(json["passed"], false);
+    assert_eq!(json["failure"], "preflight failed");
+}
+
 pub fn run(sdk: Sdk, data: &Path) -> QaReport {
     let mut report = QaReport::default();
     let host = crate::host::detect();
@@ -240,6 +270,10 @@ fn verify(
         manager.video_stop(id, token)?;
         report.checks.push(format!("Guest {}: H.264 encoder emitted headers and keyframe ({} bytes sampled; decoder playback not verified)", index + 1, sample?));
     }
+    // Harmless unique files in the disposable guests' writable data partition.
+    // Neither a production AVD nor an external device is targeted.
+    manager.qa_persistence_marker(ids[0], true)?;
+    manager.qa_persistence_marker(ids[1], true)?;
     manager.stop(ids[0])?;
     if manager.status(ids[1])?.state != DeviceState::Ready {
         return Err(Error::Runtime(
@@ -282,7 +316,9 @@ fn verify(
         ));
     }
     manager.screen_png(ids[0])?;
-    report.checks.push("Same profile identity and settings retained after restart; sibling remained ready (guest app-data persistence not verified)".into());
+    manager.qa_persistence_marker(ids[0], false)?;
+    manager.qa_persistence_marker(ids[1], false)?;
+    report.checks.push("Same profile identity/settings and guest data marker retained after restart; sibling remained ready with its own marker (arbitrary app-data migration not verified)".into());
     Ok(())
 }
 

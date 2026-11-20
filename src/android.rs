@@ -704,6 +704,33 @@ impl Android {
         }
         Ok(ScreenCapture { command })
     }
+    // Used only by the disposable runtime QA routine, never by user-facing IPC.
+    pub(crate) fn qa_persistence_marker(&mut self, d: &Device, write: bool) -> Result<()> {
+        let port = self.interactive_port(d)?;
+        let path = format!("/data/local/tmp/mes-qa-{}", d.id.simple());
+        let expected = d.id.to_string();
+        if write {
+            let mut file = tempfile::NamedTempFile::new()?;
+            file.write_all(expected.as_bytes())?;
+            file.flush()?;
+            run(
+                self.adb_for(port).arg("push").arg(file.path()).arg(&path),
+                None,
+                SHORT,
+            )?;
+        }
+        let actual = run(
+            self.adb_for(port).args(["shell", "cat", &path]),
+            None,
+            SHORT,
+        )?;
+        if actual.trim() != expected {
+            return Err(Error::Runtime(
+                "Disposable guest persistence marker mismatch".into(),
+            ));
+        }
+        Ok(())
+    }
     fn owns_port(&self, d: &Device, port: u16) -> bool {
         run(
             self.adb_for(port).args(["emu", "avd", "name"]),
