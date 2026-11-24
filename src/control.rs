@@ -102,6 +102,12 @@ pub enum Request {
         device_ids: Option<Vec<Uuid>>,
         suite: Option<crate::test_runner::MatrixTestSuite>,
     },
+    AnalyzeCrashes {
+        id: Uuid,
+    },
+    GetTelemetry {
+        id: Uuid,
+    },
 }
 pub struct Controller {
     sdk: Sdk,
@@ -251,6 +257,12 @@ impl Controller {
             }
             Request::RunMatrixTest { device_ids, suite } => {
                 json!(self.manager.run_matrix_test(device_ids, suite)?)
+            }
+            Request::AnalyzeCrashes { id } => {
+                json!(self.manager.analyze_crashes(id)?)
+            }
+            Request::GetTelemetry { id } => {
+                json!(self.manager.get_telemetry(id)?)
             }
         })
     }

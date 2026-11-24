@@ -7,7 +7,9 @@ import {
   SdkInfo,
   NetworkReport, SetupStatus, QaReport,
   MatrixTestSuite,
-  MatrixRunReport
+  MatrixRunReport,
+  ParsedCrash,
+  DeviceTelemetry
 } from './types.js';
 
 declare const window: Window & {
@@ -61,6 +63,8 @@ export interface IApiClient {
   rotateDevice(id: string, orientation: 'portrait' | 'landscape'): Promise<boolean>;
   setProxyTarget(id: string, target?: string): Promise<boolean>;
   runMatrixTest(deviceIds?: string[], suite?: MatrixTestSuite): Promise<MatrixRunReport>;
+  analyzeCrashes(id: string): Promise<ParsedCrash[]>;
+  getTelemetry(id: string): Promise<DeviceTelemetry>;
 }
 
 class TauriApiClient implements IApiClient {
@@ -196,6 +200,14 @@ class TauriApiClient implements IApiClient {
   runMatrixTest(device_ids?: string[], suite?: MatrixTestSuite): Promise<MatrixRunReport> {
     return this.dispatch<MatrixRunReport>({ action: 'run_matrix_test', device_ids, suite });
   }
+
+  analyzeCrashes(id: string): Promise<ParsedCrash[]> {
+    return this.dispatch<ParsedCrash[]>({ action: 'analyze_crashes', id });
+  }
+
+  getTelemetry(id: string): Promise<DeviceTelemetry> {
+    return this.dispatch<DeviceTelemetry>({ action: 'get_telemetry', id });
+  }
 }
 
 /**
@@ -288,6 +300,10 @@ class BrowserPreviewClient implements IApiClient {
         return true as unknown as T;
       case 'run_matrix_test':
         return (await this.runMatrixTest(request.device_ids, request.suite)) as unknown as T;
+      case 'analyze_crashes':
+        return (await this.analyzeCrashes(request.id)) as unknown as T;
+      case 'get_telemetry':
+        return (await this.getTelemetry(request.id)) as unknown as T;
       case 'get_logcat':
         return (await this.getLogcat(request.id, request.lines)) as unknown as T;
       case 'start':
@@ -464,6 +480,26 @@ class BrowserPreviewClient implements IApiClient {
           { step_id: 'screen_capture', status: 'passed', duration_ms: 450 }
         ]
       }))
+    };
+  }
+
+  async analyzeCrashes(_id: string): Promise<ParsedCrash[]> {
+    return [];
+  }
+
+  async getTelemetry(id: string): Promise<DeviceTelemetry> {
+    const devices = await this.listDevices();
+    const dev = devices.find((d) => d.id === id);
+    const ramTotal = dev?.spec.ram_mb || 4096;
+    const ramUsed = Math.round(ramTotal * 0.42);
+    return {
+      device_id: id,
+      cpu_percent: 14.5,
+      ram_used_mb: ramUsed,
+      ram_total_mb: ramTotal,
+      ram_percent: 42.0,
+      fps: 60,
+      crashes: []
     };
   }
 }
