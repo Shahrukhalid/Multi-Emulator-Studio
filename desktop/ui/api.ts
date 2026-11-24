@@ -29,7 +29,9 @@ import {
   CameraFacing,
   CameraPattern,
   CameraPatternInfo,
-  Snapshot
+  Snapshot,
+  UpdateChannel,
+  UpdateCheckResult
 } from './types.js';
 
 declare const window: Window & {
@@ -119,6 +121,8 @@ export interface IApiClient {
   loadSnapshot(id: string, name: string): Promise<boolean>;
   listSnapshots(id: string): Promise<Snapshot[]>;
   deleteSnapshot(id: string, snapshotId: string, name: string): Promise<boolean>;
+  checkForUpdates(channel?: UpdateChannel): Promise<UpdateCheckResult>;
+  pushFile(id: string, path: string, remote_path?: string): Promise<string>;
 }
 
 class TauriApiClient implements IApiClient {
@@ -398,6 +402,14 @@ class TauriApiClient implements IApiClient {
   deleteSnapshot(id: string, snapshotId: string, name: string): Promise<boolean> {
     return this.dispatch<boolean>({ action: 'delete_snapshot', id, snapshot_id: snapshotId, name });
   }
+
+  checkForUpdates(channel?: UpdateChannel): Promise<UpdateCheckResult> {
+    return this.dispatch<UpdateCheckResult>({ action: 'check_updates', channel });
+  }
+
+  pushFile(id: string, path: string, remote_path?: string): Promise<string> {
+    return this.dispatch<string>({ action: 'push_file', id, path, remote_path });
+  }
 }
 
 /**
@@ -543,6 +555,10 @@ class BrowserPreviewClient implements IApiClient {
         return true as unknown as T;
       case 'list_snapshots':
         return (await this.listSnapshots(request.id)) as unknown as T;
+      case 'check_updates':
+        return (await this.checkForUpdates(request.channel)) as unknown as T;
+      case 'push_file':
+        return (await this.pushFile(request.id, request.path, request.remote_path)) as unknown as T;
       case 'get_logcat':
         return (await this.getLogcat(request.id, request.lines)) as unknown as T;
       case 'start':
@@ -1207,6 +1223,24 @@ class BrowserPreviewClient implements IApiClient {
 
   async deleteSnapshot(_id: string, _snapshotId: string, _name: string): Promise<boolean> {
     return true;
+  }
+
+  async checkForUpdates(channel?: UpdateChannel): Promise<UpdateCheckResult> {
+    return {
+      up_to_date: true,
+      current_version: '0.1.0',
+      latest_version: '0.1.0',
+      channel: channel || 'stable',
+      release_date: '2026-11-24',
+      release_notes: 'Multi-Emulator Studio v0.1.0 is currently the latest production stable release with code-signing verification.',
+      download_url: 'https://github.com/Shahrukhalid/Multi-Emulator-Studio/releases'
+    };
+  }
+
+  async pushFile(_id: string, path: string, remote_path?: string): Promise<string> {
+    const filename = path.split(/[/\\]/).pop() || 'file';
+    const target = remote_path || (path.toLowerCase().endsWith('.apk') ? `/data/local/tmp/${filename}` : `/sdcard/Download/${filename}`);
+    return `[Preview] Pushed ${filename} to ${target}`;
   }
 }
 

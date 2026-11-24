@@ -2267,3 +2267,84 @@ body { background-image: radial-gradient(ellipse at 75% 0%, var(--studio-glow), 
   color: #3b82f6 !important;
 }
 
+/* Phase 18: File Drag & Drop Target Overlay */
+.phone-display.drag-over {
+  border: 2px dashed #3b82f6 !important;
+}
+.drop-target-overlay {
+  transition: opacity 0.15s ease;
+  animation: pulseDrop 1.5s infinite ease-in-out;
+}
+@keyframes pulseDrop {
+  0%, 100% { background-color: rgba(30, 58, 138, 0.88); }
+  50% { background-color: rgba(37, 99, 235, 0.92); }
+}
+
+/* Phase 19: Picture-in-Picture (PiP) Floating Mode */
+.phone-panel.pip-mode {
+  position: fixed !important;
+  bottom: 24px !important;
+  right: 24px !important;
+  width: 280px !important;
+  max-width: 90vw !important;
+  z-index: 9999 !important;
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.75), 0 0 0 2px var(--color-primary, #3b82f6) !important;
+  border-radius: 18px !important;
+  background: var(--bg-surface, #0f172a) !important;
+  overflow: hidden !important;
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.phone-panel.pip-mode .phone-viewer-workstation {
+  gap: 6px;
+  padding: 6px;
+}
+.phone-panel.pip-mode .floating-tool-rail {
+  top: 8px;
+  padding: 4px;
+  gap: 4px;
+  border-radius: 10px;
+}
+.phone-panel.pip-mode .rail-btn {
+  width: 26px;
+  height: 26px;
+  font-size: 11px;
+  border-radius: 6px;
+}
+.phone-panel.pip-mode .rail-tooltip {
+  display: none !important;
+}
+.phone-panel.pip-mode .phone-hardware,
+.phone-panel.pip-mode .phone-toolbar-footer,
+.phone-panel.pip-mode .phone-app-status,
+.phone-panel.pip-mode .phone-viewer-note,
+.phone-panel.pip-mode .phone-frame-metrics,
+.phone-panel.pip-mode .logcat-drawer {
+  display: none !important;
+}
+
+/* Phase 19: Detached External Window Display */
+body.detached-window-mode .app-layout > header,
+body.detached-window-mode .app-layout > nav,
+body.detached-window-mode .main-content {
+  display: none !important;
+}
+body.detached-window-mode .phone-dock {
+  position: fixed !important;
+  inset: 0 !important;
+  padding: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  background: var(--bg-app, #090d16) !important;
+  border: none !important;
+  z-index: 99999 !important;
+}
+body.detached-window-mode .phone-panel {
+  width: 100% !important;
+  height: 100% !important;
+  border-radius: 0 !important;
+  border: none !important;
+}
+
+
+

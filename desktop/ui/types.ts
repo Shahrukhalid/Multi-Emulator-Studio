@@ -143,6 +143,8 @@ export type Request =
   | { action: 'load_snapshot'; id: string; name: string }
   | { action: 'list_snapshots'; id: string }
   | { action: 'delete_snapshot'; id: string; snapshot_id: string; name: string }
+  | { action: 'check_updates'; channel?: UpdateChannel }
+  | { action: 'push_file'; id: string; path: string; remote_path?: string }
   | { action: 'list' }
   | { action: 'tick' }
   | { action: 'network' }
@@ -697,6 +699,18 @@ export interface Snapshot {
   description: string;
   created_at: string;
   size_bytes?: number;
+}
+
+export type UpdateChannel = 'stable' | 'beta' | 'nightly';
+
+export interface UpdateCheckResult {
+  up_to_date: boolean;
+  current_version: string;
+  latest_version: string;
+  channel: UpdateChannel;
+  release_date: string;
+  release_notes: string;
+  download_url?: string;
 }
 
 export function validateDeviceSpec(spec: DeviceSpec): string | null {

@@ -21,6 +21,7 @@ USAGE:
     multi-emulator-core test <DATA_DIR> [OPTIONS]          Run headless automated test matrix
     multi-emulator-core macro <DATA_DIR> <MACRO_ID> [DEV]  Run headless gesture macro replay
     multi-emulator-core crawl <DATA_DIR> <DEV> [PACKAGE]   Run autonomous Robo UI exploration crawl
+    multi-emulator-core version                            Display version and check update channels
     multi-emulator-core --probe [SDK_DIR]                  Legacy probe output
 
 TEST OPTIONS:
@@ -290,6 +291,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     match args[1].as_str() {
         "--help" | "-h" => {
             print_usage();
+            return Ok(());
+        }
+        "--version" | "-v" | "version" => {
+            let res = multi_emulator_core::updater::UpdaterEngine::check_for_updates(
+                multi_emulator_core::updater::UpdateChannel::Stable,
+            );
+            println!(
+                "Multi Emulator Studio v{} ({})\n{}",
+                res.current_version,
+                if res.up_to_date {
+                    "Latest Certified Release"
+                } else {
+                    "Update Available"
+                },
+                res.release_notes
+            );
             return Ok(());
         }
         "--probe" => {
