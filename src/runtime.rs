@@ -40,7 +40,7 @@ fn google_apps_require_exact_package_names() {
     assert!(GoogleApps::from_packages("package:com.google.android.youtube\n").youtube);
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum NavigationKey {
     Back,
@@ -67,7 +67,7 @@ fn phone_key_contract_is_allowlisted() {
     assert!(serde_json::from_value::<NavigationKey>(serde_json::json!("unknown")).is_err());
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum TouchInput {
     Tap {
@@ -157,6 +157,16 @@ pub trait Engine {
     fn set_proxy_target(&mut self, _: &Device, _target: Option<&str>) -> Result<bool> {
         Err(crate::Error::Unavailable(
             "Dynamic proxy routing is unavailable".into(),
+        ))
+    }
+    fn input_text(&mut self, _: &Device, _text: &str) -> Result<()> {
+        Err(crate::Error::Unavailable(
+            "Text input is unavailable".into(),
+        ))
+    }
+    fn launch_app(&mut self, _: &Device, _package: &str) -> Result<()> {
+        Err(crate::Error::Unavailable(
+            "App launch is unavailable".into(),
         ))
     }
 }

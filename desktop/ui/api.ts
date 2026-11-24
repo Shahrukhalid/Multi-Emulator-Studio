@@ -5,7 +5,9 @@ import {
   Status,
   HostInfo,
   SdkInfo,
-  NetworkReport, SetupStatus, QaReport
+  NetworkReport, SetupStatus, QaReport,
+  MatrixTestSuite,
+  MatrixRunReport
 } from './types.js';
 
 declare const window: Window & {
@@ -58,6 +60,7 @@ export interface IApiClient {
   getLogcat(id: string, lines?: number): Promise<string>;
   rotateDevice(id: string, orientation: 'portrait' | 'landscape'): Promise<boolean>;
   setProxyTarget(id: string, target?: string): Promise<boolean>;
+  runMatrixTest(deviceIds?: string[], suite?: MatrixTestSuite): Promise<MatrixRunReport>;
 }
 
 class TauriApiClient implements IApiClient {
@@ -189,6 +192,10 @@ class TauriApiClient implements IApiClient {
   setProxyTarget(id: string, target?: string): Promise<boolean> {
     return this.dispatch<boolean>({ action: 'set_proxy_target', id, target });
   }
+
+  runMatrixTest(device_ids?: string[], suite?: MatrixTestSuite): Promise<MatrixRunReport> {
+    return this.dispatch<MatrixRunReport>({ action: 'run_matrix_test', device_ids, suite });
+  }
 }
 
 /**
@@ -279,6 +286,8 @@ class BrowserPreviewClient implements IApiClient {
       case 'rotate':
       case 'set_proxy_target':
         return true as unknown as T;
+      case 'run_matrix_test':
+        return (await this.runMatrixTest(request.device_ids, request.suite)) as unknown as T;
       case 'get_logcat':
         return (await this.getLogcat(request.id, request.lines)) as unknown as T;
       case 'start':
@@ -430,6 +439,32 @@ class BrowserPreviewClient implements IApiClient {
 
   async setProxyTarget(_id: string, _target?: string): Promise<boolean> {
     return true;
+  }
+
+  async runMatrixTest(device_ids?: string[], _suite?: MatrixTestSuite): Promise<MatrixRunReport> {
+    const devices = await this.listDevices();
+    const targetDevs = device_ids && device_ids.length > 0
+      ? devices.filter((d) => device_ids.includes(d.id))
+      : devices;
+    return {
+      suite_id: 'smoke',
+      suite_name: 'Smoke Test Suite',
+      total_devices: targetDevs.length,
+      passed_devices: targetDevs.length,
+      failed_devices: 0,
+      total_duration_ms: 1840,
+      devices: targetDevs.map((d) => ({
+        device_id: d.id,
+        device_name: d.spec.name,
+        status: 'passed',
+        total_duration_ms: 1840,
+        steps: [
+          { step_id: 'assert_alive', status: 'passed', duration_ms: 120 },
+          { step_id: 'key_home', status: 'passed', duration_ms: 240 },
+          { step_id: 'screen_capture', status: 'passed', duration_ms: 450 }
+        ]
+      }))
+    };
   }
 }
 

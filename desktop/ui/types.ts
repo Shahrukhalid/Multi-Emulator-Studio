@@ -106,6 +106,7 @@ export type Request =
   | { action: 'get_logcat'; id: string; lines?: number }
   | { action: 'rotate'; id: string; orientation: 'portrait' | 'landscape' }
   | { action: 'set_proxy_target'; id: string; target?: string }
+  | { action: 'run_matrix_test'; device_ids?: string[]; suite?: MatrixTestSuite }
   | { action: 'list' }
   | { action: 'tick' }
   | { action: 'network' }
@@ -396,6 +397,34 @@ export interface MatrixDeviceSnapshot {
   errorStepId?: string;
   errorMessage?: string;
   screenColor?: string;
+  screenshot?: string;
+}
+
+export interface MatrixStepResult {
+  step_id: string;
+  status: 'pending' | 'running' | 'passed' | 'failed' | 'skipped';
+  duration_ms: number;
+  error?: string | null;
+  screenshot_base64?: string | null;
+}
+
+export interface MatrixDeviceResult {
+  device_id: string;
+  device_name: string;
+  status: 'pending' | 'running' | 'passed' | 'failed' | 'skipped';
+  total_duration_ms: number;
+  steps: MatrixStepResult[];
+  latest_screenshot?: string | null;
+}
+
+export interface MatrixRunReport {
+  suite_id: string;
+  suite_name: string;
+  total_devices: number;
+  passed_devices: number;
+  failed_devices: number;
+  total_duration_ms: number;
+  devices: MatrixDeviceResult[];
 }
 
 export function validateDeviceSpec(spec: DeviceSpec): string | null {
