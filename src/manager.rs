@@ -299,6 +299,49 @@ impl<E: Engine> Manager<E> {
         let device = self.store.get(id)?;
         self.engine.get_sensor_state(&device)
     }
+    pub fn run_robo_crawl(
+        &mut self,
+        id: Uuid,
+        config: crate::crawler::CrawlConfig,
+    ) -> Result<crate::crawler::RoboCrawlReport> {
+        let device = self.store.get(id)?;
+        self.engine.run_robo_crawl(&device, &config)
+    }
+    pub fn inject_camera_pattern(
+        &mut self,
+        id: Uuid,
+        pattern: crate::camera::CameraPattern,
+        facing: crate::camera::CameraFacing,
+        payload: Option<&str>,
+    ) -> Result<()> {
+        let device = self.store.get(id)?;
+        self.engine
+            .inject_camera_pattern(&device, pattern, facing, payload)
+    }
+    pub fn save_snapshot(
+        &mut self,
+        id: Uuid,
+        name: &str,
+        description: &str,
+    ) -> Result<crate::snapshot::Snapshot> {
+        let device = self.store.get(id)?;
+        let snapshot = crate::snapshot::Snapshot::new(id, name, description);
+        self.engine.snapshot_save(&device, &snapshot.name)?;
+        self.store.save_snapshot(&snapshot)?;
+        Ok(snapshot)
+    }
+    pub fn load_snapshot(&mut self, id: Uuid, name: &str) -> Result<()> {
+        let device = self.store.get(id)?;
+        self.engine.snapshot_load(&device, name)
+    }
+    pub fn list_snapshots(&self, id: Uuid) -> Result<Vec<crate::snapshot::Snapshot>> {
+        self.store.list_snapshots(id)
+    }
+    pub fn delete_snapshot(&mut self, id: Uuid, snapshot_id: Uuid, name: &str) -> Result<()> {
+        let device = self.store.get(id)?;
+        let _ = self.engine.snapshot_delete(&device, name);
+        self.store.delete_snapshot(snapshot_id)
+    }
     pub fn list_macros(&self) -> Result<Vec<crate::macro_runner::MacroDefinition>> {
         self.store.list_macros()
     }

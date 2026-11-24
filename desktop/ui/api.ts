@@ -23,7 +23,13 @@ import {
   BiometricAction,
   BatteryState,
   SensorUpdate,
-  DeviceSensorState
+  DeviceSensorState,
+  CrawlConfig,
+  RoboCrawlReport,
+  CameraFacing,
+  CameraPattern,
+  CameraPatternInfo,
+  Snapshot
 } from './types.js';
 
 declare const window: Window & {
@@ -106,6 +112,13 @@ export interface IApiClient {
   setBatteryState(id: string, state: BatteryState): Promise<boolean>;
   setSensorState(id: string, update: SensorUpdate): Promise<boolean>;
   getSensorState(id: string): Promise<DeviceSensorState>;
+  runRoboCrawl(id: string, config?: CrawlConfig): Promise<RoboCrawlReport>;
+  getCameraPatterns(): Promise<CameraPatternInfo[]>;
+  injectCameraPattern(id: string, pattern: CameraPattern, facing: CameraFacing, payload?: string): Promise<boolean>;
+  saveSnapshot(id: string, name: string, description?: string): Promise<Snapshot>;
+  loadSnapshot(id: string, name: string): Promise<boolean>;
+  listSnapshots(id: string): Promise<Snapshot[]>;
+  deleteSnapshot(id: string, snapshotId: string, name: string): Promise<boolean>;
 }
 
 class TauriApiClient implements IApiClient {
@@ -357,6 +370,34 @@ class TauriApiClient implements IApiClient {
   getSensorState(id: string): Promise<DeviceSensorState> {
     return this.dispatch<DeviceSensorState>({ action: 'get_sensor_state', id });
   }
+
+  runRoboCrawl(id: string, config?: CrawlConfig): Promise<RoboCrawlReport> {
+    return this.dispatch<RoboCrawlReport>({ action: 'run_robo_crawl', id, config });
+  }
+
+  getCameraPatterns(): Promise<CameraPatternInfo[]> {
+    return this.dispatch<CameraPatternInfo[]>({ action: 'get_camera_patterns' });
+  }
+
+  injectCameraPattern(id: string, pattern: CameraPattern, facing: CameraFacing, payload?: string): Promise<boolean> {
+    return this.dispatch<boolean>({ action: 'inject_camera_pattern', id, pattern, facing, payload });
+  }
+
+  saveSnapshot(id: string, name: string, description?: string): Promise<Snapshot> {
+    return this.dispatch<Snapshot>({ action: 'save_snapshot', id, name, description });
+  }
+
+  loadSnapshot(id: string, name: string): Promise<boolean> {
+    return this.dispatch<boolean>({ action: 'load_snapshot', id, name });
+  }
+
+  listSnapshots(id: string): Promise<Snapshot[]> {
+    return this.dispatch<Snapshot[]>({ action: 'list_snapshots', id });
+  }
+
+  deleteSnapshot(id: string, snapshotId: string, name: string): Promise<boolean> {
+    return this.dispatch<boolean>({ action: 'delete_snapshot', id, snapshot_id: snapshotId, name });
+  }
 }
 
 /**
@@ -489,6 +530,19 @@ class BrowserPreviewClient implements IApiClient {
         return (await this.getAudioSamples()) as unknown as T;
       case 'get_sensor_state':
         return (await this.getSensorState(request.id)) as unknown as T;
+      case 'run_robo_crawl':
+        return (await this.runRoboCrawl(request.id, request.config)) as unknown as T;
+      case 'get_camera_patterns':
+        return (await this.getCameraPatterns()) as unknown as T;
+      case 'inject_camera_pattern':
+        return true as unknown as T;
+      case 'save_snapshot':
+        return (await this.saveSnapshot(request.id, request.name, request.description)) as unknown as T;
+      case 'load_snapshot':
+      case 'delete_snapshot':
+        return true as unknown as T;
+      case 'list_snapshots':
+        return (await this.listSnapshots(request.id)) as unknown as T;
       case 'get_logcat':
         return (await this.getLogcat(request.id, request.lines)) as unknown as T;
       case 'start':
@@ -1033,6 +1087,126 @@ class BrowserPreviewClient implements IApiClient {
       proximity_cm: 5.0,
       light_lux: 300.0
     };
+  }
+
+  async runRoboCrawl(id: string, config?: CrawlConfig): Promise<RoboCrawlReport> {
+    return {
+      session_id: 'preview-crawl-session-1',
+      device_id: id,
+      package_name: config?.package_name || 'com.android.settings',
+      duration_ms: 3200,
+      screens_discovered: 4,
+      actions_performed: 12,
+      transitions: [
+        {
+          step_index: 1,
+          from_activity: 'com.android.settings.MainActivity',
+          to_activity: 'com.android.settings.NetworkActivity',
+          action: { action: 'tap', element_id: 'btn_network', x: 540, y: 800 },
+          duration_ms: 250
+        },
+        {
+          step_index: 2,
+          from_activity: 'com.android.settings.NetworkActivity',
+          to_activity: 'com.android.settings.WifiActivity',
+          action: { action: 'tap', element_id: 'btn_wifi', x: 540, y: 920 },
+          duration_ms: 310
+        },
+        {
+          step_index: 3,
+          from_activity: 'com.android.settings.WifiActivity',
+          to_activity: 'com.android.settings.MainActivity',
+          action: { action: 'navigate_back' },
+          duration_ms: 180
+        }
+      ],
+      crashes: [],
+      status: 'completed'
+    };
+  }
+
+  async getCameraPatterns(): Promise<CameraPatternInfo[]> {
+    return [
+      {
+        id: 'color_bars',
+        pattern: 'color_bars',
+        title: 'SMPTE Color Calibration Bars',
+        description: 'Standard multi-color alignment bars for camera sensor tuning.',
+        default_payload: 'SMPTE_75'
+      },
+      {
+        id: 'qr_code',
+        pattern: 'qr_code',
+        title: '2D QR Code Pattern',
+        description: 'High-contrast geometric QR pattern for scanning & login authentication.',
+        default_payload: 'https://multiemulator.studio/auth?session=live_demo'
+      },
+      {
+        id: 'barcode_128',
+        pattern: 'barcode_128',
+        title: 'Code 128 Linear Barcode',
+        description: 'Linear 1D bar code pattern for retail & inventory scanner validation.',
+        default_payload: 'MES-128-PROD-99824'
+      },
+      {
+        id: 'document_scan',
+        pattern: 'document_scan',
+        title: 'Identity Document / Invoice Card',
+        description: 'High-contrast document rectangle with headers for OCR scanner testing.',
+        default_payload: 'PASSPORT / DRIVER LICENSE SIMULATION'
+      },
+      {
+        id: 'checkerboard',
+        pattern: 'checkerboard',
+        title: 'Optical Distortion Checkerboard',
+        description: '8x8 checkerboard grid for lens distortion calibration.',
+        default_payload: 'GRID_8X8'
+      }
+    ];
+  }
+
+  async injectCameraPattern(_id: string, _pattern: CameraPattern, _facing: CameraFacing, _payload?: string): Promise<boolean> {
+    return true;
+  }
+
+  async saveSnapshot(id: string, name: string, description?: string): Promise<Snapshot> {
+    return {
+      id: 'preview-snapshot-1',
+      device_id: id,
+      name,
+      description: description || 'State checkpoint',
+      created_at: new Date().toISOString(),
+      size_bytes: 1024 * 1024 * 128
+    };
+  }
+
+  async loadSnapshot(_id: string, _name: string): Promise<boolean> {
+    return true;
+  }
+
+  async listSnapshots(id: string): Promise<Snapshot[]> {
+    return [
+      {
+        id: '00000000-0000-0000-0000-000000000010',
+        device_id: id,
+        name: 'clean_setup_checkpoint',
+        description: 'Fresh initial installation before testing',
+        created_at: '2026-11-24T12:00:00Z',
+        size_bytes: 1024 * 1024 * 128
+      },
+      {
+        id: '00000000-0000-0000-0000-000000000020',
+        device_id: id,
+        name: 'logged_in_user_cart',
+        description: 'Authenticated test account with 3 items in cart',
+        created_at: '2026-11-24T12:30:00Z',
+        size_bytes: 1024 * 1024 * 128
+      }
+    ];
+  }
+
+  async deleteSnapshot(_id: string, _snapshotId: string, _name: string): Promise<boolean> {
+    return true;
   }
 }
 

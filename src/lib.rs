@@ -1,7 +1,9 @@
 pub mod android;
 pub mod audio;
 pub mod budget;
+pub mod camera;
 pub mod control;
+pub mod crawler;
 pub mod diagnostics;
 pub mod error;
 pub mod fleet;
@@ -18,6 +20,7 @@ pub mod report;
 pub mod runtime;
 pub mod runtime_qa;
 pub mod sensor;
+pub mod snapshot;
 pub mod storage;
 pub mod test_runner;
 mod video;

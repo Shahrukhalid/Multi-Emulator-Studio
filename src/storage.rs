@@ -11,7 +11,8 @@ impl Store {
             "PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;
             CREATE TABLE IF NOT EXISTS devices(id TEXT PRIMARY KEY, data TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS config(key TEXT PRIMARY KEY, value TEXT NOT NULL);
-            CREATE TABLE IF NOT EXISTS macros(id TEXT PRIMARY KEY, data TEXT NOT NULL);",
+            CREATE TABLE IF NOT EXISTS macros(id TEXT PRIMARY KEY, data TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS snapshots(id TEXT PRIMARY KEY, device_id TEXT NOT NULL, name TEXT NOT NULL, data TEXT NOT NULL);",
         )?;
         Ok(Self(c))
     }
@@ -138,6 +139,49 @@ impl Store {
             .execute("DELETE FROM macros WHERE id=?1", [id.to_string()])?;
         Ok(())
     }
+    pub fn save_snapshot(&self, s: &crate::snapshot::Snapshot) -> Result<()> {
+        self.0.execute(
+            "INSERT OR REPLACE INTO snapshots VALUES(?1, ?2, ?3, ?4)",
+            params![
+                s.id.to_string(),
+                s.device_id.to_string(),
+                s.name,
+                serde_json::to_string(s)?
+            ],
+        )?;
+        Ok(())
+    }
+    pub fn list_snapshots(&self, device_id: Uuid) -> Result<Vec<crate::snapshot::Snapshot>> {
+        let mut stmt = self
+            .0
+            .prepare("SELECT data FROM snapshots WHERE device_id=?1 ORDER BY rowid DESC")?;
+        let rows = stmt.query_map([device_id.to_string()], |r| r.get::<_, String>(0))?;
+        let mut list = Vec::new();
+        for row in rows {
+            let data = row?;
+            let s: crate::snapshot::Snapshot = serde_json::from_str(&data)?;
+            list.push(s);
+        }
+        Ok(list)
+    }
+    pub fn get_snapshot(&self, id: Uuid) -> Result<crate::snapshot::Snapshot> {
+        let value: Option<String> = self
+            .0
+            .query_row(
+                "SELECT data FROM snapshots WHERE id=?1",
+                [id.to_string()],
+                |r| r.get(0),
+            )
+            .optional()?;
+        let s: crate::snapshot::Snapshot =
+            serde_json::from_str(&value.ok_or_else(|| Error::Invalid("unknown snapshot".into()))?)?;
+        Ok(s)
+    }
+    pub fn delete_snapshot(&self, id: Uuid) -> Result<()> {
+        self.0
+            .execute("DELETE FROM snapshots WHERE id=?1", [id.to_string()])?;
+        Ok(())
+    }
 }
 #[cfg(test)]
 mod tests {
@@ -198,5 +242,23 @@ mod tests {
             "Custom Renamed Macro"
         );
         s.delete_macro(sample_macro.id).unwrap();
+    }
+    #[test]
+    fn snapshot_persistence_roundtrip() {
+        let dir = tempfile::tempdir().unwrap();
+        let s = Store::open(&dir.path().join("test.db")).unwrap();
+        let dev_id = Uuid::new_v4();
+        let snap = crate::snapshot::Snapshot::new(dev_id, "test_checkpoint", "Before running test");
+        s.save_snapshot(&snap).unwrap();
+
+        let list = s.list_snapshots(dev_id).unwrap();
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].name, "test_checkpoint");
+
+        let fetched = s.get_snapshot(snap.id).unwrap();
+        assert_eq!(fetched.name, "test_checkpoint");
+
+        s.delete_snapshot(snap.id).unwrap();
+        assert!(s.list_snapshots(dev_id).unwrap().is_empty());
     }
 }

@@ -192,6 +192,34 @@ pub enum Request {
     GetSensorState {
         id: Uuid,
     },
+    RunRoboCrawl {
+        id: Uuid,
+        config: Option<crate::crawler::CrawlConfig>,
+    },
+    GetCameraPatterns,
+    InjectCameraPattern {
+        id: Uuid,
+        pattern: crate::camera::CameraPattern,
+        facing: crate::camera::CameraFacing,
+        payload: Option<String>,
+    },
+    SaveSnapshot {
+        id: Uuid,
+        name: String,
+        description: Option<String>,
+    },
+    LoadSnapshot {
+        id: Uuid,
+        name: String,
+    },
+    ListSnapshots {
+        id: Uuid,
+    },
+    DeleteSnapshot {
+        id: Uuid,
+        snapshot_id: Uuid,
+        name: String,
+    },
 }
 pub struct Controller {
     sdk: Sdk,
@@ -459,6 +487,46 @@ impl Controller {
             }
             Request::GetSensorState { id } => {
                 json!(self.manager.get_sensor_state(id)?)
+            }
+            Request::RunRoboCrawl { id, config } => {
+                let cfg = config.unwrap_or_default();
+                json!(self.manager.run_robo_crawl(id, cfg)?)
+            }
+            Request::GetCameraPatterns => {
+                json!(crate::camera::CameraEngine::standard_patterns())
+            }
+            Request::InjectCameraPattern {
+                id,
+                pattern,
+                facing,
+                payload,
+            } => {
+                self.manager
+                    .inject_camera_pattern(id, pattern, facing, payload.as_deref())?;
+                json!(true)
+            }
+            Request::SaveSnapshot {
+                id,
+                name,
+                description,
+            } => {
+                let desc = description.unwrap_or_else(|| "Snapshot state checkpoint".into());
+                json!(self.manager.save_snapshot(id, &name, &desc)?)
+            }
+            Request::LoadSnapshot { id, name } => {
+                self.manager.load_snapshot(id, &name)?;
+                json!(true)
+            }
+            Request::ListSnapshots { id } => {
+                json!(self.manager.list_snapshots(id)?)
+            }
+            Request::DeleteSnapshot {
+                id,
+                snapshot_id,
+                name,
+            } => {
+                self.manager.delete_snapshot(id, snapshot_id, &name)?;
+                json!(true)
             }
         })
     }

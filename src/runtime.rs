@@ -222,4 +222,37 @@ pub trait Engine {
     fn get_sensor_state(&mut self, _: &Device) -> Result<crate::sensor::DeviceSensorState> {
         Ok(crate::sensor::DeviceSensorState::default())
     }
+    fn run_robo_crawl(
+        &mut self,
+        d: &Device,
+        config: &crate::crawler::CrawlConfig,
+    ) -> Result<crate::crawler::RoboCrawlReport> {
+        crate::crawler::RoboCrawler::crawl(self, d, config)
+    }
+    fn inject_camera_pattern(
+        &mut self,
+        _: &Device,
+        _pattern: crate::camera::CameraPattern,
+        _facing: crate::camera::CameraFacing,
+        _payload: Option<&str>,
+    ) -> Result<()> {
+        Err(crate::Error::Unavailable(
+            "Camera pattern injection is unavailable".into(),
+        ))
+    }
+    fn snapshot_save(&mut self, _: &Device, _name: &str) -> Result<()> {
+        Err(crate::Error::Unavailable(
+            "Snapshot save is unavailable".into(),
+        ))
+    }
+    fn snapshot_load(&mut self, _: &Device, _name: &str) -> Result<()> {
+        Err(crate::Error::Unavailable(
+            "Snapshot load is unavailable".into(),
+        ))
+    }
+    fn snapshot_delete(&mut self, _: &Device, _name: &str) -> Result<()> {
+        Err(crate::Error::Unavailable(
+            "Snapshot delete is unavailable".into(),
+        ))
+    }
 }
