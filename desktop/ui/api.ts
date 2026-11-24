@@ -9,7 +9,9 @@ import {
   MatrixTestSuite,
   MatrixRunReport,
   ParsedCrash,
-  DeviceTelemetry
+  DeviceTelemetry,
+  IosRuntime,
+  IosSimulatorDevice
 } from './types.js';
 
 declare const window: Window & {
@@ -65,6 +67,10 @@ export interface IApiClient {
   runMatrixTest(deviceIds?: string[], suite?: MatrixTestSuite): Promise<MatrixRunReport>;
   analyzeCrashes(id: string): Promise<ParsedCrash[]>;
   getTelemetry(id: string): Promise<DeviceTelemetry>;
+  getIosRuntimes(): Promise<IosRuntime[]>;
+  getIosDevices(): Promise<IosSimulatorDevice[]>;
+  bootIosSimulator(udid: string): Promise<boolean>;
+  shutdownIosSimulator(udid: string): Promise<boolean>;
 }
 
 class TauriApiClient implements IApiClient {
@@ -208,6 +214,22 @@ class TauriApiClient implements IApiClient {
   getTelemetry(id: string): Promise<DeviceTelemetry> {
     return this.dispatch<DeviceTelemetry>({ action: 'get_telemetry', id });
   }
+
+  getIosRuntimes(): Promise<IosRuntime[]> {
+    return this.dispatch<IosRuntime[]>({ action: 'ios_runtimes' });
+  }
+
+  getIosDevices(): Promise<IosSimulatorDevice[]> {
+    return this.dispatch<IosSimulatorDevice[]>({ action: 'ios_devices' });
+  }
+
+  bootIosSimulator(udid: string): Promise<boolean> {
+    return this.dispatch<boolean>({ action: 'ios_boot', udid });
+  }
+
+  shutdownIosSimulator(udid: string): Promise<boolean> {
+    return this.dispatch<boolean>({ action: 'ios_shutdown', udid });
+  }
 }
 
 /**
@@ -304,6 +326,13 @@ class BrowserPreviewClient implements IApiClient {
         return (await this.analyzeCrashes(request.id)) as unknown as T;
       case 'get_telemetry':
         return (await this.getTelemetry(request.id)) as unknown as T;
+      case 'ios_runtimes':
+        return (await this.getIosRuntimes()) as unknown as T;
+      case 'ios_devices':
+        return (await this.getIosDevices()) as unknown as T;
+      case 'ios_boot':
+      case 'ios_shutdown':
+        return true as unknown as T;
       case 'get_logcat':
         return (await this.getLogcat(request.id, request.lines)) as unknown as T;
       case 'start':
@@ -501,6 +530,51 @@ class BrowserPreviewClient implements IApiClient {
       fps: 60,
       crashes: []
     };
+  }
+
+  async getIosRuntimes(): Promise<IosRuntime[]> {
+    return [
+      { identifier: 'com.apple.CoreSimulator.SimRuntime.iOS-17-4', version: '17.4', name: 'iOS 17.4', is_available: true },
+      { identifier: 'com.apple.CoreSimulator.SimRuntime.iOS-17-2', version: '17.2', name: 'iOS 17.2', is_available: true },
+      { identifier: 'com.apple.CoreSimulator.SimRuntime.iOS-16-4', version: '16.4', name: 'iOS 16.4', is_available: true }
+    ];
+  }
+
+  async getIosDevices(): Promise<IosSimulatorDevice[]> {
+    return [
+      {
+        udid: 'sim-iphone-15-pro',
+        name: 'iPhone 15 Pro',
+        state: 'Shutdown',
+        is_available: true,
+        device_type_identifier: 'com.apple.CoreSimulator.SimDeviceType.iPhone-15-Pro',
+        runtime_identifier: 'com.apple.CoreSimulator.SimRuntime.iOS-17-4'
+      },
+      {
+        udid: 'sim-iphone-15',
+        name: 'iPhone 15',
+        state: 'Shutdown',
+        is_available: true,
+        device_type_identifier: 'com.apple.CoreSimulator.SimDeviceType.iPhone-15',
+        runtime_identifier: 'com.apple.CoreSimulator.SimRuntime.iOS-17-4'
+      },
+      {
+        udid: 'sim-ipad-air',
+        name: 'iPad Air (5th generation)',
+        state: 'Shutdown',
+        is_available: true,
+        device_type_identifier: 'com.apple.CoreSimulator.SimDeviceType.iPad-Air-5th-generation',
+        runtime_identifier: 'com.apple.CoreSimulator.SimRuntime.iOS-17-2'
+      }
+    ];
+  }
+
+  async bootIosSimulator(_udid: string): Promise<boolean> {
+    return true;
+  }
+
+  async shutdownIosSimulator(_udid: string): Promise<boolean> {
+    return true;
   }
 }
 

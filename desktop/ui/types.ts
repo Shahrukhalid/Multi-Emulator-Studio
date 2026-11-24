@@ -109,6 +109,10 @@ export type Request =
   | { action: 'run_matrix_test'; device_ids?: string[]; suite?: MatrixTestSuite }
   | { action: 'analyze_crashes'; id: string }
   | { action: 'get_telemetry'; id: string }
+  | { action: 'ios_runtimes' }
+  | { action: 'ios_devices' }
+  | { action: 'ios_boot'; udid: string }
+  | { action: 'ios_shutdown'; udid: string }
   | { action: 'list' }
   | { action: 'tick' }
   | { action: 'network' }
@@ -450,6 +454,22 @@ export interface DeviceTelemetry {
   crashes: ParsedCrash[];
 }
 
+export interface IosSimulatorDevice {
+  udid: string;
+  name: string;
+  state: string;
+  is_available: boolean;
+  device_type_identifier?: string | null;
+  runtime_identifier?: string | null;
+}
+
+export interface IosRuntime {
+  identifier: string;
+  version: string;
+  name: string;
+  is_available: boolean;
+}
+
 export function validateDeviceSpec(spec: DeviceSpec): string | null {
   const safe = (s: string) =>
     !s || (s.length <= 128 && s !== '.' && s !== '..' && !s.startsWith('-') && /^[a-zA-Z0-9_.-]+$/.test(s));
@@ -457,13 +477,19 @@ export function validateDeviceSpec(spec: DeviceSpec): string | null {
   if (!spec.name.trim() || spec.name.length > 128) {
     return 'Device name must be between 1 and 128 characters.';
   }
-  const parts = spec.image.split(';');
-  if (parts.length !== 4 || parts[0] !== 'system-images' || !parts[1].startsWith('android-')) {
-    return 'Image must follow the format system-images;android-<api>;<tag>;<abi>';
-  }
-  for (let i = 1; i < parts.length; i++) {
-    if (!safe(parts[i])) {
-      return `Invalid character in system image identifier: ${parts[i]}`;
+  if (spec.image.startsWith('ios-') || spec.image.includes('CoreSimulator')) {
+    if (!safe(spec.image)) {
+      return 'iOS Simulator runtime identifier contains unsupported characters.';
+    }
+  } else {
+    const parts = spec.image.split(';');
+    if (parts.length !== 4 || parts[0] !== 'system-images' || !parts[1].startsWith('android-')) {
+      return 'Image must follow the format system-images;android-<api>;<tag>;<abi>';
+    }
+    for (let i = 1; i < parts.length; i++) {
+      if (!safe(parts[i])) {
+        return `Invalid character in system image identifier: ${parts[i]}`;
+      }
     }
   }
   if (!safe(spec.hardware_profile)) {
