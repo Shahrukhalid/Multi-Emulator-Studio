@@ -14,6 +14,8 @@ export class DeviceListComponent {
   private cardInstances: Map<string, DeviceCardComponent> = new Map();
   private searchTerm = '';
   private viewMode: 'grid' | 'list' = 'grid';
+  private filterStatus: 'all' | 'running' | 'stopped' = 'all';
+  private sortBy: 'newest' | 'name' = 'newest';
 
   constructor(callbacks: DeviceListCallbacks) {
     this.callbacks = callbacks;
@@ -54,15 +56,52 @@ export class DeviceListComponent {
   }
 
   private render(): void {
+    const statusMap = new Map<string, Status>();
+    for (const s of this.statuses) statusMap.set(s.id, s);
+
+    const runningCount = this.devices.filter((d) => statusMap.get(d.id)?.state === 'ready').length;
+    const stoppedCount = this.devices.length - runningCount;
+
     this.element.innerHTML = `
       <section class="workspace-overview" aria-label="Device workspace overview">
-        <div class="workspace-intro"><span class="workspace-kicker">YOUR WORKSPACE</span><h1>My devices</h1><p>Launch, manage and interact with your virtual Android devices.</p></div>
-        <div class="workspace-stats"><div class="workspace-stat"><span>Devices</span><strong id="stat-devices">0</strong></div><div class="workspace-stat"><span>Ready</span><strong id="stat-ready">0</strong></div><div class="workspace-stat"><span>Starting / queued</span><strong id="stat-queued">0</strong></div></div>
+        <div class="workspace-intro">
+          <span class="workspace-kicker">DEVICE MANAGER</span>
+          <h1>My Devices</h1>
+          <p>Manage your virtual Android and iOS devices with high-speed proxy and location control.</p>
+        </div>
+
+        <div class="workspace-stats">
+          <div class="workspace-stat"><span>Total Devices</span><strong id="stat-devices">${this.devices.length}</strong></div>
+          <div class="workspace-stat"><span>Active / Running</span><strong id="stat-ready">${runningCount}</strong></div>
+          <div class="workspace-stat"><span>Stopped</span><strong id="stat-queued">${stoppedCount}</strong></div>
+        </div>
       </section>
+
+      <!-- Toolbar with Filter Pills & Controls matching master datasheet -->
       <div class="toolbar-bar">
+        <div class="devices-filter-pills">
+          <button class="filter-pill ${this.filterStatus === 'all' ? 'active' : ''}" data-status-filter="all">
+            All (${this.devices.length})
+          </button>
+          <button class="filter-pill ${this.filterStatus === 'running' ? 'active' : ''}" data-status-filter="running">
+            Running (${runningCount})
+          </button>
+          <button class="filter-pill ${this.filterStatus === 'stopped' ? 'active' : ''}" data-status-filter="stopped">
+            Stopped (${stoppedCount})
+          </button>
+        </div>
+
         <div class="search-field">
           ${Icons.search}
-          <input type="text" id="devices-search-input" aria-label="Search devices" placeholder="Search devices by name or version..." />
+          <input type="text" id="devices-search-input" aria-label="Search devices" placeholder="Search devices by name or version..." value="${this.escapeHtml(this.searchTerm)}" />
+        </div>
+
+        <div class="sort-selector-wrapper">
+          <span style="font-size: 11px; color: var(--text-tertiary);">Sort:</span>
+          <select class="form-select-input sort-select" id="devices-sort-select">
+            <option value="newest" ${this.sortBy === 'newest' ? 'selected' : ''}>Newest</option>
+            <option value="name" ${this.sortBy === 'name' ? 'selected' : ''}>Name A-Z</option>
+          </select>
         </div>
 
         <div class="view-mode-toggle">
@@ -73,17 +112,39 @@ export class DeviceListComponent {
             ${Icons.list}
           </button>
         </div>
+
+        <button class="btn-create-primary" id="btn-list-create">
+          ${Icons.plus}
+          <span>Create Device</span>
+        </button>
       </div>
 
       <div class="device-grid" id="devices-cards-grid"></div>
     `;
 
+    // Filter pills
+    this.element.querySelectorAll<HTMLButtonElement>('[data-status-filter]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        this.filterStatus = btn.dataset.statusFilter as typeof this.filterStatus;
+        this.render();
+      });
+    });
+
+    // Search input
     const searchInput = this.element.querySelector('#devices-search-input') as HTMLInputElement;
     searchInput?.addEventListener('input', () => {
       this.searchTerm = searchInput.value.toLowerCase().trim();
       this.updateGrid();
     });
 
+    // Sort select
+    const sortSelect = this.element.querySelector('#devices-sort-select') as HTMLSelectElement;
+    sortSelect?.addEventListener('change', () => {
+      this.sortBy = sortSelect.value as typeof this.sortBy;
+      this.updateGrid();
+    });
+
+    // View toggles
     this.element.querySelector('#btn-mode-grid')?.addEventListener('click', () => {
       this.viewMode = 'grid';
       this.element.querySelector('#btn-mode-grid')?.classList.add('active');
@@ -98,6 +159,10 @@ export class DeviceListComponent {
       this.element.querySelector('#btn-mode-grid')?.classList.remove('active');
       const grid = this.element.querySelector('#devices-cards-grid');
       if (grid) grid.className = 'device-grid list-view';
+    });
+
+    this.element.querySelector('#btn-list-create')?.addEventListener('click', () => {
+      this.callbacks.onCreateClick();
     });
 
     this.updateGrid();
@@ -116,7 +181,11 @@ export class DeviceListComponent {
       statusMap.set(s.id, s);
     }
 
-    const filtered = this.devices.filter((d) => {
+    let list = this.devices.filter((d) => {
+      const state = statusMap.get(d.id)?.state;
+      if (this.filterStatus === 'running' && state !== 'ready') return false;
+      if (this.filterStatus === 'stopped' && state === 'ready') return false;
+
       if (!this.searchTerm) return true;
       return (
         d.spec.name.toLowerCase().includes(this.searchTerm) ||
@@ -125,17 +194,21 @@ export class DeviceListComponent {
       );
     });
 
-    if (filtered.length === 0) {
+    if (this.sortBy === 'name') {
+      list = [...list].sort((a, b) => a.spec.name.localeCompare(b.spec.name));
+    }
+
+    if (list.length === 0) {
       gridContainer.innerHTML = `
         <div style="grid-column: 1 / -1; text-align: center; padding: 48px 20px; color: var(--text-secondary);">
-          <p style="font-size: 15px; font-weight: 500;">No devices match "${this.escapeHtml(this.searchTerm)}"</p>
-          <p style="font-size: 13px; color: var(--text-tertiary); margin-top: 4px;">Check your search query or clear the filter.</p>
+          <p style="font-size: 15px; font-weight: 500;">No devices found</p>
+          <p style="font-size: 13px; color: var(--text-tertiary); margin-top: 4px;">Adjust your filters or click "+ Create Device" to add a new device.</p>
         </div>
       `;
       return;
     }
 
-    for (const d of filtered) {
+    for (const d of list) {
       const card = new DeviceCardComponent(d, statusMap.get(d.id) ?? null, this.callbacks);
       this.cardInstances.set(d.id, card);
       gridContainer.appendChild(card.getElement());
@@ -143,9 +216,13 @@ export class DeviceListComponent {
   }
 
   private updateSummary(): void {
-    const known = new Set(this.devices.map(device => device.id));
-    const statuses = this.statuses.filter(status => known.has(status.id));
-    const counts = { 'stat-devices': this.devices.length, 'stat-ready': statuses.filter(status => status.state === 'ready' && !status.diagnostic).length, 'stat-queued': statuses.filter(status => status.state === 'starting' || status.state === 'queued').length };
+    const known = new Set(this.devices.map((device) => device.id));
+    const statuses = this.statuses.filter((status) => known.has(status.id));
+    const counts = {
+      'stat-devices': this.devices.length,
+      'stat-ready': statuses.filter((status) => status.state === 'ready' && !status.diagnostic).length,
+      'stat-queued': statuses.filter((status) => status.state === 'stopped' || !status.state).length
+    };
     for (const [id, value] of Object.entries(counts)) {
       const element = this.element.querySelector(`#${id}`);
       if (element) element.textContent = String(value);

@@ -1,0 +1,243 @@
+import { Device, Status, parseFriendlyVersion } from '../types.js';
+import { Icons } from '../icons.js';
+import { Illustrations } from '../illustrations.js';
+
+export interface DeviceDetailsCallbacks {
+  onBack: () => void;
+  onStart: (device: Device) => void;
+  onOpen: (device: Device) => void;
+  onStop: (device: Device) => void;
+  onRestart: (device: Device) => void;
+  onDelete: (device: Device) => void;
+  onInstallApk: (device: Device) => void;
+}
+
+export class DeviceDetailsComponent {
+  private element: HTMLElement;
+  private device: Device;
+  private status: Status | null;
+  private callbacks: DeviceDetailsCallbacks;
+  private activeSubTab: 'overview' | 'apps' | 'files' | 'settings' | 'diagnostics' = 'overview';
+
+  constructor(device: Device, status: Status | null, callbacks: DeviceDetailsCallbacks) {
+    this.device = device;
+    this.status = status;
+    this.callbacks = callbacks;
+    this.element = document.createElement('div');
+    this.element.className = 'device-details-view';
+    this.render();
+  }
+
+  getElement(): HTMLElement {
+    return this.element;
+  }
+
+  updateData(device: Device, status: Status | null): void {
+    this.device = device;
+    this.status = status;
+    this.render();
+  }
+
+  private render(): void {
+    const { spec } = this.device;
+    const friendly = parseFriendlyVersion(spec.image);
+    const isRunning = this.status?.state === 'ready';
+    const isStarting = this.status?.state === 'starting';
+
+    this.element.innerHTML = `
+      <div class="details-top-bar">
+        <button class="btn-back-link" id="btn-details-back">
+          ← Back to Devices
+        </button>
+      </div>
+
+      <div class="details-layout">
+        <!-- Main Details Content -->
+        <div class="details-main-column">
+          <!-- Device Header Banner -->
+          <div class="details-header-card">
+            <div class="details-brand-avatar">
+              ${Illustrations.phone}
+            </div>
+            <div class="details-brand-info">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <h1 class="details-device-name">${this.escapeHtml(spec.name)}</h1>
+                <span class="status-indicator ${isRunning ? 'ready' : isStarting ? 'starting' : 'stopped'}"></span>
+                <span class="status-text-pill ${isRunning ? 'ready' : isStarting ? 'starting' : 'stopped'}">
+                  ${isRunning ? 'Running' : isStarting ? 'Starting...' : 'Stopped'}
+                </span>
+              </div>
+              <p class="details-device-subtitle">
+                ${friendly.versionName} (${friendly.tag}) · ${spec.hardware_profile}
+              </p>
+            </div>
+
+            <div class="details-header-actions">
+              ${isRunning
+                ? `<button class="btn-create-primary" id="btn-details-open">${Icons.external}<span>Open Screen</span></button>
+                   <button class="nav-item" id="btn-details-restart">${Icons.rotate}<span>Restart</span></button>
+                   <button class="nav-item danger" id="btn-details-stop"><span>Stop</span></button>`
+                : `<button class="btn-create-primary" id="btn-details-start">${Icons.play}<span>Start Device</span></button>`
+              }
+              <button class="nav-item" id="btn-details-apk" title="Install APK">${Icons.download}</button>
+              <button class="nav-item danger" id="btn-details-delete" title="Delete Device">×</button>
+            </div>
+          </div>
+
+          <!-- Sub Tabs Navigation -->
+          <nav class="details-subnav" aria-label="Device tabs">
+            <button class="details-tab-btn ${this.activeSubTab === 'overview' ? 'active' : ''}" data-subtab="overview">Overview</button>
+            <button class="details-tab-btn ${this.activeSubTab === 'apps' ? 'active' : ''}" data-subtab="apps">Apps</button>
+            <button class="details-tab-btn ${this.activeSubTab === 'files' ? 'active' : ''}" data-subtab="files">Files</button>
+            <button class="details-tab-btn ${this.activeSubTab === 'settings' ? 'active' : ''}" data-subtab="settings">Settings</button>
+            <button class="details-tab-btn ${this.activeSubTab === 'diagnostics' ? 'active' : ''}" data-subtab="diagnostics">Diagnostics</button>
+          </nav>
+
+          <!-- Tab Content Slot -->
+          <div class="details-subtab-content" id="details-tab-content">
+            ${this.renderSubTabContent(friendly)}
+          </div>
+        </div>
+
+        <!-- Right Preview Column -->
+        <div class="details-side-preview">
+          <div class="device-mockup-frame">
+            <div class="mockup-bezel">
+              <div class="mockup-camera-dot"></div>
+              <div class="mockup-screen-wallpaper">
+                <div class="mockup-screen-content">
+                  <div class="mockup-clock">9:41</div>
+                  <div class="mockup-home-hint">${spec.name}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <p class="mockup-caption">Visual viewport mockup · ${spec.width} × ${spec.height} px</p>
+        </div>
+      </div>
+    `;
+
+    // Event listeners
+    this.element.querySelector('#btn-details-back')?.addEventListener('click', () => this.callbacks.onBack());
+    this.element.querySelector('#btn-details-open')?.addEventListener('click', () => this.callbacks.onOpen(this.device));
+    this.element.querySelector('#btn-details-start')?.addEventListener('click', () => this.callbacks.onStart(this.device));
+    this.element.querySelector('#btn-details-restart')?.addEventListener('click', () => this.callbacks.onRestart(this.device));
+    this.element.querySelector('#btn-details-stop')?.addEventListener('click', () => this.callbacks.onStop(this.device));
+    this.element.querySelector('#btn-details-delete')?.addEventListener('click', () => this.callbacks.onDelete(this.device));
+    this.element.querySelector('#btn-details-apk')?.addEventListener('click', () => this.callbacks.onInstallApk(this.device));
+
+    this.element.querySelectorAll<HTMLButtonElement>('.details-tab-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const tab = btn.dataset.subtab as typeof this.activeSubTab;
+        if (tab) {
+          this.activeSubTab = tab;
+          this.render();
+        }
+      });
+    });
+  }
+
+  private renderSubTabContent(friendly: { versionName: string; tag: string }): string {
+    const { spec } = this.device;
+
+    if (this.activeSubTab === 'overview') {
+      return `
+        <div class="info-table-card">
+          <h3 class="section-title">Device Information</h3>
+          <div class="info-grid">
+            <div class="info-row">
+              <span class="info-key">Device Type</span>
+              <span class="info-val">${spec.hardware_profile}</span>
+            </div>
+            <div class="info-row">
+              <span class="info-key">OS Version</span>
+              <span class="info-val">${friendly.versionName} (${friendly.tag})</span>
+            </div>
+            <div class="info-row">
+              <span class="info-key">CPU Cores</span>
+              <span class="info-val">${spec.cores} Cores</span>
+            </div>
+            <div class="info-row">
+              <span class="info-key">RAM</span>
+              <span class="info-val">${Math.round(spec.ram_mb / 1024)} GB (${spec.ram_mb} MB)</span>
+            </div>
+            <div class="info-row">
+              <span class="info-key">Storage Disk</span>
+              <span class="info-val">${Math.round(spec.disk_mb / 1024)} GB (${spec.disk_mb} MB)</span>
+            </div>
+            <div class="info-row">
+              <span class="info-key">Screen Resolution</span>
+              <span class="info-val">${spec.width} × ${spec.height} (Density: 420 dpi)</span>
+            </div>
+            <div class="info-row">
+              <span class="info-key">Language & Locale</span>
+              <span class="info-val">${spec.locale}</span>
+            </div>
+            <div class="info-row">
+              <span class="info-key">Network Egress Proxy</span>
+              <span class="info-val"><code>${spec.proxy || 'Direct (System Default)'}</code></span>
+            </div>
+            <div class="info-row">
+              <span class="info-key">Geolocation Preset</span>
+              <span class="info-val">${spec.location_preset || 'Default Host Location'}</span>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    if (this.activeSubTab === 'apps') {
+      return `
+        <div class="info-table-card">
+          <h3 class="section-title">Installed Applications</h3>
+          <p class="form-helper-text">Install APK packages or manage apps directly inside the device.</p>
+          <div style="margin-top: 16px;">
+            <button class="btn-create-primary" id="btn-tab-install-apk">${Icons.plus}<span>Install .apk package</span></button>
+          </div>
+        </div>
+      `;
+    }
+
+    if (this.activeSubTab === 'files') {
+      return `
+        <div class="info-table-card">
+          <h3 class="section-title">Device Storage & Files</h3>
+          <p class="form-helper-text">Isolated storage container at <code>${spec.name}.avd</code></p>
+          <div class="storage-bar-wrapper" style="margin-top: 16px;">
+            <div class="storage-bar"><div class="storage-fill" style="width: 25%;"></div></div>
+            <span class="form-helper-text">2.1 GB used of ${Math.round(spec.disk_mb / 1024)} GB</span>
+          </div>
+        </div>
+      `;
+    }
+
+    if (this.activeSubTab === 'settings') {
+      return `
+        <div class="info-table-card">
+          <h3 class="section-title">Hardware & Graphics Configuration</h3>
+          <div class="form-block">
+            <label class="form-helper-text">Graphics Mode</label>
+            <input class="form-text-input" value="${spec.graphics_mode || 'auto'}" readonly />
+          </div>
+        </div>
+      `;
+    }
+
+    // Diagnostics
+    return `
+      <div class="info-table-card">
+        <h3 class="section-title">Runtime Diagnostics</h3>
+        <p class="form-helper-text">Status: <strong>${this.status?.state || 'stopped'}</strong></p>
+        <p class="form-helper-text">Console port: ${this.status?.console_port || 'None'}</p>
+        <p class="form-helper-text">Addresses: ${(this.status?.addresses || []).join(', ') || '127.0.0.1'}</p>
+        ${this.status?.diagnostic ? `<div class="preview-banner" style="margin-top: 12px;">${this.escapeHtml(this.status.diagnostic)}</div>` : ''}
+      </div>
+    `;
+  }
+
+  private escapeHtml(text: string): string {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+}

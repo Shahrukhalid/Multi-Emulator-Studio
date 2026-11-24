@@ -893,6 +893,12 @@ impl Engine for Android {
             "-gpu",
             d.spec.graphics_mode.emulator_arg(),
         ]);
+        if let Some(proxy) = &d.spec.proxy {
+            let trimmed = proxy.trim();
+            if !trimmed.is_empty() {
+                launch.args(["-http-proxy", trimmed]);
+            }
+        }
         if std::env::var_os("MES_HEADLESS").as_deref() != Some(std::ffi::OsStr::new("0")) {
             launch.arg("-no-window");
         }
@@ -1237,6 +1243,72 @@ impl Engine for Android {
             cmd.arg("250");
         }
         run(&mut cmd, None, Duration::from_secs(3))?;
+        Ok(())
+    }
+    fn set_location(
+        &mut self,
+        d: &Device,
+        lat: f64,
+        lon: f64,
+        timezone: Option<&str>,
+    ) -> Result<()> {
+        let port = self.interactive_port(d)?;
+        let _ = run(
+            self.adb_for(port)
+                .args(["emu", "geo", "fix", &lon.to_string(), &lat.to_string()]),
+            None,
+            Duration::from_secs(3),
+        );
+        if let Some(tz) = timezone {
+            let _ = run(
+                self.adb_for(port)
+                    .args(["shell", "setprop", "persist.sys.timezone", tz]),
+                None,
+                Duration::from_secs(3),
+            );
+        }
+        Ok(())
+    }
+    fn get_logcat(&mut self, d: &Device, lines: usize) -> Result<String> {
+        let port = self.interactive_port(d)?;
+        let count = lines.clamp(10, 500).to_string();
+        run(
+            self.adb_for(port)
+                .args(["logcat", "-d", "-t", &count, "-v", "time"]),
+            None,
+            SHORT,
+        )
+    }
+    fn rotate(&mut self, d: &Device, orientation: &str) -> Result<()> {
+        let port = self.interactive_port(d)?;
+        let rotation = match orientation {
+            "landscape" => "1",
+            _ => "0",
+        };
+        let _ = run(
+            self.adb_for(port).args([
+                "shell",
+                "settings",
+                "put",
+                "system",
+                "accelerometer_rotation",
+                "0",
+            ]),
+            None,
+            Duration::from_secs(3),
+        );
+        run(
+            self.adb_for(port).args([
+                "shell",
+                "settings",
+                "put",
+                "system",
+                "user_rotation",
+                rotation,
+            ]),
+            None,
+            Duration::from_secs(3),
+        )?;
         Ok(())
     }
 }

@@ -1,5 +1,15 @@
 import { getApiClient, IApiClient } from './api.js';
-import { Device, Status, HostInfo, SdkInfo, NetworkReport, DeviceSpec, DevicePreset, RuntimePreflight, isGooglePlayImage } from './types.js';
+import {
+  Device,
+  Status,
+  HostInfo,
+  SdkInfo,
+  NetworkReport,
+  DeviceSpec,
+  DevicePreset,
+  RuntimePreflight,
+  isGooglePlayImage
+} from './types.js';
 import { HeaderComponent, MainNavTab } from './components/header.js';
 import { WelcomeComponent } from './components/welcome.js';
 import { DeviceListComponent } from './components/device_list.js';
@@ -9,6 +19,10 @@ import { WizardComponent } from './components/wizard.js';
 import { PhoneViewer } from './components/phone_viewer.js';
 import { ApkModalComponent } from './components/apk_modal.js';
 import { DeleteModalComponent } from './components/delete_modal.js';
+import { LocationModalComponent } from './components/location_modal.js';
+import { DownloadsComponent } from './components/downloads.js';
+import { TestMatrixComponent } from './components/test_matrix.js';
+import { DeviceDetailsComponent } from './components/device_details.js';
 import { toast } from './toast.js';
 
 export class App {
@@ -19,9 +33,14 @@ export class App {
   private welcome: WelcomeComponent;
   private deviceList: DeviceListComponent;
   private templates: TemplatesComponent;
+  private downloads: DownloadsComponent;
+  private testMatrix: TestMatrixComponent;
   private settings: SettingsComponent;
 
   private activeTab: MainNavTab = 'devices';
+  private selectedDetailDevice: Device | null = null;
+  private deviceDetails: DeviceDetailsComponent | null = null;
+
   private activeModal: HTMLElement | null = null;
   private modalCleanup: (() => void) | null = null;
   private modalKey: ((event: KeyboardEvent) => void) | null = null;
@@ -39,7 +58,6 @@ export class App {
   private accelerationText = '';
   private preflight: RuntimePreflight = { ready: false, version: '', acceleration: '', diagnostic: 'Runtime not checked' };
   private dataDir = '';
-  private sdkDir = '';
   private isConnected = false;
 
   constructor(rootElement: HTMLElement) {
@@ -76,12 +94,45 @@ export class App {
       onRename: (d) => this.handleRename(d),
       onDuplicate: (d) => this.handleDuplicate(d),
       onInstallApk: (d) => this.handleInstallApk(d),
-      onDelete: (d) => this.handleDeletePrompt(d)
+      onDelete: (d) => this.handleDeletePrompt(d),
+      onDetails: (d) => this.handleShowDetails(d)
     });
 
     // Templates view initialization
     this.templates = new TemplatesComponent({
       onUseTemplate: (preset) => this.openWizard(preset)
+    });
+
+    // Downloads / Setup view initialization
+    this.downloads = new DownloadsComponent(
+      null,
+      this.preflight,
+      0,
+      {
+        onCheckSdk: async () => {
+          await this.refreshSdkCatalog();
+          toast.show('SDK components verified', 'success');
+        },
+        onInstallRuntime: async () => {
+          await this.api.installGooglePlay();
+          await this.refreshSdkCatalog();
+          toast.show('Google Play System Image installed', 'success');
+        },
+        onManagedSetup: async () => {
+          this.switchTab('settings');
+          await this.api.beginManagedSetup();
+        }
+      }
+    );
+
+    // Test Matrix view initialization
+    this.testMatrix = new TestMatrixComponent({
+      onRunMatrix: () => {
+        toast.show('Parallel test matrix execution started across devices', 'info');
+      },
+      onSelectStep: (suite, step) => {
+        toast.show(`Selected test step: ${suite} > ${step}`, 'info');
+      }
     });
 
     // Settings view initialization
@@ -97,9 +148,9 @@ export class App {
         onManagedStart: () => this.api.beginManagedSetup(),
         onRunQa: () => this.api.qaRuntimeCheck(),
         onManagedStatus: () => this.api.managedSetupStatus(),
-        onManagedAnswer: yes => this.api.managedSetupAnswer(yes),
+        onManagedAnswer: (yes) => this.api.managedSetupAnswer(yes),
         onManagedCancel: () => this.api.cancelManagedSetup(),
-        onManagedConnect: async sdkRoot => {
+        onManagedConnect: async (sdkRoot) => {
           await this.api.connect(this.dataDir, sdkRoot);
           this.isConnected = true;
           await this.refreshAll();
@@ -141,7 +192,10 @@ export class App {
           }
           await this.refreshSdkCatalog();
           const ready = this.preflight.ready && this.images.some(isGooglePlayImage) && !!this.hardwareProfiles.length;
-          toast.show(ready ? 'Runtime preflight passed; actual boot still unverified' : 'Runtime setup requires attention', ready ? 'success' : 'warning');
+          toast.show(
+            ready ? 'Runtime preflight passed; actual boot still unverified' : 'Runtime setup requires attention',
+            ready ? 'success' : 'warning'
+          );
         },
         onFetchLogs: async () => {
           if (this.devices.length > 0) {
@@ -201,6 +255,7 @@ export class App {
 
       await this.refreshDevices();
 
+      this.downloads.updateData(this.sdk, this.preflight, this.images.length);
       this.settings.updateData(
         this.host,
         this.sdk,
@@ -221,6 +276,13 @@ export class App {
       this.devices = await this.api.listDevices();
       this.statuses = await this.api.health().catch(() => []);
       this.deviceList.setData(this.devices, this.statuses);
+      if (this.selectedDetailDevice) {
+        const found = this.devices.find((d) => d.id === this.selectedDetailDevice?.id);
+        if (found) {
+          const status = this.statuses.find((s) => s.id === found.id) ?? null;
+          this.deviceDetails?.updateData(found, status);
+        }
+      }
       this.switchTab(this.activeTab);
     } catch (err: unknown) {
       const msg = (err as { message?: string }).message || String(err);
@@ -233,6 +295,7 @@ export class App {
     this.images = await this.api.getImages().catch(() => []);
     this.hardwareProfiles = await this.api.getHardwareProfiles().catch(() => []);
     await this.refreshRuntimePreflight();
+    this.downloads.updateData(this.sdk, this.preflight, this.images.length);
     this.settings.updateData(
       this.host,
       this.sdk,
@@ -248,7 +311,12 @@ export class App {
     try {
       this.preflight = await this.api.dispatch<RuntimePreflight>({ action: 'runtime_preflight' });
     } catch (err: unknown) {
-      this.preflight = { ready: false, version: '', acceleration: '', diagnostic: (err as { message?: string }).message || String(err) };
+      this.preflight = {
+        ready: false,
+        version: '',
+        acceleration: '',
+        diagnostic: (err as { message?: string }).message || String(err)
+      };
     }
     this.accelerationText = this.preflight.acceleration;
   }
@@ -261,6 +329,9 @@ export class App {
         this.statuses = statuses;
         for (const s of statuses) {
           this.deviceList.updateSingleStatus(s);
+          if (this.selectedDetailDevice && s.id === this.selectedDetailDevice.id) {
+            this.deviceDetails?.updateData(this.selectedDetailDevice, s);
+          }
         }
       } catch {
         // Silent health polling failure
@@ -278,16 +349,41 @@ export class App {
     container.innerHTML = '';
 
     if (tab === 'devices') {
-      if (this.devices.length === 0) {
+      if (this.selectedDetailDevice && this.deviceDetails) {
+        container.appendChild(this.deviceDetails.getElement());
+      } else if (this.devices.length === 0) {
         container.appendChild(this.welcome.getElement());
       } else {
         container.appendChild(this.deviceList.getElement());
       }
     } else if (tab === 'templates') {
       container.appendChild(this.templates.getElement());
+    } else if (tab === 'downloads') {
+      container.appendChild(this.downloads.getElement());
+    } else if (tab === 'matrix') {
+      container.appendChild(this.testMatrix.getElement());
     } else if (tab === 'settings') {
       container.appendChild(this.settings.getElement());
     }
+  }
+
+  private handleShowDetails(device: Device): void {
+    this.selectedDetailDevice = device;
+    const status = this.statuses.find((s) => s.id === device.id) ?? null;
+    this.deviceDetails = new DeviceDetailsComponent(device, status, {
+      onBack: () => {
+        this.selectedDetailDevice = null;
+        this.deviceDetails = null;
+        this.switchTab('devices');
+      },
+      onStart: (d) => this.handleStart(d),
+      onOpen: (d) => this.handleOpen(d),
+      onStop: (d) => this.handleStop(d),
+      onRestart: (d) => this.handleRestart(d),
+      onDelete: (d) => this.handleDeletePrompt(d),
+      onInstallApk: (d) => this.handleInstallApk(d)
+    });
+    this.switchTab('devices');
   }
 
   // Action handlers
@@ -310,19 +406,50 @@ export class App {
   }
 
   private handleOpen(device: Device): void {
-    if (this.api.isPreview) { toast.show('Live screen requires the native app', 'warning'); return; }
+    if (this.api.isPreview) {
+      toast.show('Live screen requires the native app', 'warning');
+      return;
+    }
     const existing = this.phones.get(device.id);
-    if (existing) { existing.element.scrollIntoView({ block: 'nearest' }); return; }
-    if (this.phones.size >= 4) { toast.show('Close a phone view before opening another (four visible screens maximum).', 'warning'); return; }
-    const viewer = new PhoneViewer(this.api, device, () => {
-      viewer.dispose(); viewer.element.remove(); this.phones.delete(device.id);
-      this.phoneDock.hidden = this.phones.size === 0;
-    });
+    if (existing) {
+      existing.element.scrollIntoView({ block: 'nearest' });
+      return;
+    }
+    if (this.phones.size >= 4) {
+      toast.show('Close a phone view before opening another (four visible screens maximum).', 'warning');
+      return;
+    }
+    const viewer = new PhoneViewer(
+      this.api,
+      device,
+      () => {
+        viewer.dispose();
+        viewer.element.remove();
+        this.phones.delete(device.id);
+        this.phoneDock.hidden = this.phones.size === 0;
+      },
+      () => this.handleInstallApk(device),
+      () => this.handleOpenLocation(device)
+    );
     this.phones.set(device.id, viewer);
     this.phoneDock.appendChild(viewer.element);
     this.phoneDock.hidden = false;
     viewer.begin();
     viewer.element.scrollIntoView({ block: 'nearest' });
+  }
+
+  private handleOpenLocation(device: Device): void {
+    const modal = new LocationModalComponent(device, {
+      onApply: async (lat, lon, tz, proxy) => {
+        await this.api.setLocation(device.id, lat, lon, tz);
+        if (proxy) {
+          device.spec.proxy = proxy;
+        }
+        toast.show(`Location synchronized: ${lat}, ${lon} (${tz})`, 'success');
+      },
+      onClose: () => this.closeModal()
+    });
+    this.openModal(modal.getElement());
   }
 
   private async handleStop(device: Device): Promise<void> {
@@ -402,6 +529,10 @@ export class App {
     const modal = new DeleteModalComponent(device, {
       onConfirmDelete: async (_d) => {
         await this.api.deleteDevice(device.id);
+        if (this.selectedDetailDevice?.id === device.id) {
+          this.selectedDetailDevice = null;
+          this.deviceDetails = null;
+        }
         await this.refreshDevices();
         toast.show(`Deleted ${device.spec.name}`, 'info');
       },

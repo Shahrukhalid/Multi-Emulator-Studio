@@ -217,6 +217,24 @@ impl<E: Engine> Manager<E> {
             diagnostic: Some(err.to_string()),
         }
     }
+    pub fn set_location(
+        &mut self,
+        id: Uuid,
+        lat: f64,
+        lon: f64,
+        timezone: Option<&str>,
+    ) -> Result<()> {
+        let device = self.store.get(id)?;
+        self.engine.set_location(&device, lat, lon, timezone)
+    }
+    pub fn get_logcat(&mut self, id: Uuid, lines: usize) -> Result<String> {
+        let device = self.store.get(id)?;
+        self.engine.get_logcat(&device, lines)
+    }
+    pub fn rotate(&mut self, id: Uuid, orientation: &str) -> Result<()> {
+        let device = self.store.get(id)?;
+        self.engine.rotate(&device, orientation)
+    }
 }
 
 #[cfg(test)]

@@ -32,6 +32,10 @@ pub struct DeviceSpec {
     pub locale: String,
     #[serde(default)]
     pub graphics_mode: GraphicsMode,
+    #[serde(default)]
+    pub proxy: Option<String>,
+    #[serde(default)]
+    pub location_preset: Option<String>,
 }
 impl DeviceSpec {
     pub fn validate(&self) -> Result<()> {
@@ -60,6 +64,20 @@ impl DeviceSpec {
             || !(2048..=131072).contains(&self.disk_mb)
         {
             return Err(Error::Invalid("invalid device specification".into()));
+        }
+        if let Some(proxy) = &self.proxy {
+            if proxy.len() > 512
+                || proxy.contains('\0')
+                || proxy.contains('\n')
+                || proxy.contains('\r')
+            {
+                return Err(Error::Invalid("invalid proxy configuration".into()));
+            }
+        }
+        if let Some(loc) = &self.location_preset {
+            if !loc.is_empty() && (!safe(loc) || loc.len() > 64) {
+                return Err(Error::Invalid("invalid location preset".into()));
+            }
         }
         Ok(())
     }
@@ -144,5 +162,7 @@ pub fn sample() -> DeviceSpec {
         disk_mb: 4096,
         locale: "en-US".into(),
         graphics_mode: GraphicsMode::Auto,
+        proxy: None,
+        location_preset: None,
     }
 }

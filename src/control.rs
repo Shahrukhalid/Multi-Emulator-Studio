@@ -80,6 +80,20 @@ pub enum Request {
         id: Uuid,
         input: crate::runtime::TouchInput,
     },
+    SetLocation {
+        id: Uuid,
+        latitude: f64,
+        longitude: f64,
+        timezone: Option<String>,
+    },
+    GetLogcat {
+        id: Uuid,
+        lines: Option<usize>,
+    },
+    Rotate {
+        id: Uuid,
+        orientation: String,
+    },
 }
 pub struct Controller {
     sdk: Sdk,
@@ -205,6 +219,23 @@ impl Controller {
             }
             Request::Touch { id, input } => {
                 self.manager.touch(id, input)?;
+                json!(true)
+            }
+            Request::SetLocation {
+                id,
+                latitude,
+                longitude,
+                timezone,
+            } => {
+                self.manager
+                    .set_location(id, latitude, longitude, timezone.as_deref())?;
+                json!(true)
+            }
+            Request::GetLogcat { id, lines } => {
+                json!(self.manager.get_logcat(id, lines.unwrap_or(100))?)
+            }
+            Request::Rotate { id, orientation } => {
+                self.manager.rotate(id, &orientation)?;
                 json!(true)
             }
         })
