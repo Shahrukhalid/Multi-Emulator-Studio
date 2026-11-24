@@ -1446,6 +1446,155 @@ impl Engine for Android {
             Duration::from_secs(3),
         )
     }
+    fn set_audio_state(&mut self, d: &Device, volume: u32, muted: bool) -> Result<()> {
+        let port = self.interactive_port(d)?;
+        let vol = if muted {
+            0
+        } else {
+            (volume * 15 / 100).clamp(0, 15)
+        };
+        let _ = run(
+            self.adb_for(port).args([
+                "shell",
+                "media",
+                "volume",
+                "--stream",
+                "3",
+                "--set",
+                &vol.to_string(),
+            ]),
+            None,
+            Duration::from_secs(3),
+        );
+        Ok(())
+    }
+    fn inject_audio_sample(&mut self, d: &Device, sample_id: &str) -> Result<()> {
+        let port = self.interactive_port(d)?;
+        let wav = crate::audio::AudioEngine::generate_wav_sample(sample_id);
+        let tmp = self.home.join(format!("sample_{sample_id}.wav"));
+        fs::write(&tmp, &wav)?;
+        let _ = run(
+            self.adb_for(port).args([
+                "push",
+                tmp.to_string_lossy().as_ref(),
+                "/sdcard/mock_audio.wav",
+            ]),
+            None,
+            Duration::from_secs(5),
+        );
+        let _ = fs::remove_file(tmp);
+        Ok(())
+    }
+    fn simulate_biometrics(
+        &mut self,
+        d: &Device,
+        action: crate::sensor::BiometricAction,
+    ) -> Result<()> {
+        let port = self.interactive_port(d)?;
+        match action {
+            crate::sensor::BiometricAction::Match { finger_id } => {
+                let _ = run(
+                    self.adb_for(port)
+                        .args(["emu", "finger", "touch", &finger_id.to_string()]),
+                    None,
+                    Duration::from_secs(3),
+                );
+            }
+            crate::sensor::BiometricAction::Unmatch => {
+                let _ = run(
+                    self.adb_for(port).args(["emu", "finger", "touch", "9999"]),
+                    None,
+                    Duration::from_secs(3),
+                );
+            }
+            crate::sensor::BiometricAction::Enroll { enrolled } => {
+                if enrolled {
+                    let _ = run(
+                        self.adb_for(port).args(["emu", "finger", "touch", "1"]),
+                        None,
+                        Duration::from_secs(3),
+                    );
+                } else {
+                    let _ = run(
+                        self.adb_for(port).args(["emu", "finger", "remove", "1"]),
+                        None,
+                        Duration::from_secs(3),
+                    );
+                }
+            }
+        }
+        Ok(())
+    }
+    fn set_battery_state(&mut self, d: &Device, state: crate::sensor::BatteryState) -> Result<()> {
+        let port = self.interactive_port(d)?;
+        let cap = state.capacity.clamp(0, 100).to_string();
+        let _ = run(
+            self.adb_for(port).args(["emu", "power", "capacity", &cap]),
+            None,
+            Duration::from_secs(3),
+        );
+        let ac = if state.charging { "on" } else { "off" };
+        let _ = run(
+            self.adb_for(port).args(["emu", "power", "ac", ac]),
+            None,
+            Duration::from_secs(3),
+        );
+        let _ = run(
+            self.adb_for(port)
+                .args(["emu", "power", "status", &state.status]),
+            None,
+            Duration::from_secs(3),
+        );
+        let _ = run(
+            self.adb_for(port)
+                .args(["emu", "power", "health", &state.health]),
+            None,
+            Duration::from_secs(3),
+        );
+        Ok(())
+    }
+    fn set_sensor_state(&mut self, d: &Device, update: crate::sensor::SensorUpdate) -> Result<()> {
+        let port = self.interactive_port(d)?;
+        match update {
+            crate::sensor::SensorUpdate::Accelerometer { x, y, z } => {
+                let val = format!("{x}:{y}:{z}");
+                let _ = run(
+                    self.adb_for(port)
+                        .args(["emu", "sensor", "set", "acceleration", &val]),
+                    None,
+                    Duration::from_secs(3),
+                );
+            }
+            crate::sensor::SensorUpdate::Gyroscope { x, y, z } => {
+                let val = format!("{x}:{y}:{z}");
+                let _ = run(
+                    self.adb_for(port)
+                        .args(["emu", "sensor", "set", "gyroscope", &val]),
+                    None,
+                    Duration::from_secs(3),
+                );
+            }
+            crate::sensor::SensorUpdate::Proximity { distance_cm } => {
+                let val = distance_cm.to_string();
+                let _ = run(
+                    self.adb_for(port)
+                        .args(["emu", "sensor", "set", "proximity", &val]),
+                    None,
+                    Duration::from_secs(3),
+                );
+            }
+            crate::sensor::SensorUpdate::Light { lux } => {
+                let val = lux.to_string();
+                let _ = run(
+                    self.adb_for(port)
+                        .args(["emu", "sensor", "set", "light", &val]),
+                    None,
+                    Duration::from_secs(3),
+                );
+            }
+        }
+        Ok(())
+    }
 }
 impl Drop for Android {
     fn drop(&mut self) {

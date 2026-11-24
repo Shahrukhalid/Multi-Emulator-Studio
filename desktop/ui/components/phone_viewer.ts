@@ -92,6 +92,15 @@ export class PhoneViewer {
             <span class="rail-tooltip">Play Macro</span>
           </button>
           <div class="rail-divider"></div>
+          <button class="rail-btn" data-action="audio" title="Real-Time Audio & Sound Injection" aria-label="Audio">
+            <span style="font-size: 14px;">🔊</span>
+            <span class="rail-tooltip">Audio</span>
+          </button>
+          <button class="rail-btn" data-action="sensors" title="Biometrics & Hardware Sensors Hub" aria-label="Sensors">
+            <span style="font-size: 14px;">🧬</span>
+            <span class="rail-tooltip">Sensors</span>
+          </button>
+          <div class="rail-divider"></div>
           <button class="rail-btn" data-key="back" title="Back" aria-label="Back">◁</button>
           <button class="rail-btn" data-key="home" title="Home" aria-label="Home">○</button>
           <button class="rail-btn" data-key="recents" title="Recents" aria-label="Recents">□</button>
@@ -206,6 +215,12 @@ export class PhoneViewer {
     });
     this.element.querySelector('[data-action="play_macro"]')?.addEventListener('click', () => {
       void this.showPlayMacroDialog();
+    });
+    this.element.querySelector('[data-action="audio"]')?.addEventListener('click', () => {
+      void this.showAudioDialog();
+    });
+    this.element.querySelector('[data-action="sensors"]')?.addEventListener('click', () => {
+      void this.showSensorsDialog();
     });
 
     // Logcat Drawer events
@@ -815,6 +830,125 @@ export class PhoneViewer {
       }
     } catch (err: unknown) {
       toast.show(`Macro replay failed: ${(err as { message?: string }).message || String(err)}`, 'error');
+    }
+  }
+
+  private async showAudioDialog(): Promise<void> {
+    try {
+      const state = await this.api.getAudioState(this.device.id);
+      const samples = await this.api.getAudioSamples();
+
+      const choice = window.prompt(
+        `🔊 Audio Streaming & Sound Injection (${this.device.spec.name}):\n` +
+        `Current Volume: ${state.output_volume}% (${state.muted ? 'MUTED' : 'ACTIVE'})\n\n` +
+        `Options:\n` +
+        `1. Set Volume (0 - 100)\n` +
+        `2. Toggle Mute / Unmute\n` +
+        `3. Inject Synthesized Sound Sample...\n\n` +
+        `Enter option (1, 2, or 3):`,
+        '1'
+      );
+      if (!choice) return;
+
+      if (choice.trim() === '1') {
+        const volStr = window.prompt(`Enter desired volume (0 - 100):`, String(state.output_volume));
+        if (volStr !== null) {
+          const vol = parseInt(volStr.trim(), 10);
+          if (!isNaN(vol) && vol >= 0 && vol <= 100) {
+            await this.api.setAudioState(this.device.id, vol, false);
+            toast.show(`Device volume set to ${vol}%`, 'success');
+          } else {
+            toast.show('Volume must be between 0 and 100.', 'error');
+          }
+        }
+      } else if (choice.trim() === '2') {
+        const nextMuted = !state.muted;
+        await this.api.setAudioState(this.device.id, state.output_volume, nextMuted);
+        toast.show(`Device audio ${nextMuted ? 'muted' : 'unmuted'}.`, 'success');
+      } else if (choice.trim() === '3') {
+        const sampleList = samples.map((s, i) => `${i + 1}. [${s.category.toUpperCase()}] ${s.title} (${s.duration_ms}ms)`).join('\n');
+        const sChoice = window.prompt(`Select Audio Sample to Inject:\n\n${sampleList}\n\nEnter number (1-${samples.length}):`, '1');
+        if (!sChoice) return;
+        const sIdx = parseInt(sChoice.trim(), 10) - 1;
+        if (!isNaN(sIdx) && sIdx >= 0 && sIdx < samples.length) {
+          const sample = samples[sIdx];
+          toast.show(`Injecting "${sample.title}" into device audio buffer...`, 'info');
+          await this.api.injectAudioSample(this.device.id, sample.id);
+          toast.show(`Audio injection complete: "${sample.title}" played successfully!`, 'success');
+        } else {
+          toast.show('Invalid sample selection.', 'error');
+        }
+      }
+    } catch (err: unknown) {
+      toast.show(`Audio control error: ${(err as { message?: string }).message || String(err)}`, 'error');
+    }
+  }
+
+  private async showSensorsDialog(): Promise<void> {
+    try {
+      const choice = window.prompt(
+        `🧬 Biometrics & Hardware Sensors Simulator Hub (${this.device.spec.name}):\n\n` +
+        `1. Biometrics: Fingerprint MATCH (Success)\n` +
+        `2. Biometrics: Fingerprint REJECT (Fail / Unmatch)\n` +
+        `3. Battery: 100% (AC Charging / Full)\n` +
+        `4. Battery: 15% (Discharging / Low Battery)\n` +
+        `5. Tilt Orientation: Flat Table (0° tilt)\n` +
+        `6. Tilt Orientation: Portrait 45° Pitch\n` +
+        `7. Tilt Orientation: Landscape 45° Roll\n` +
+        `8. Proximity Sensor: Close / Near (0.5cm)\n\n` +
+        `Enter option (1-8):`,
+        '1'
+      );
+      if (!choice) return;
+
+      switch (choice.trim()) {
+        case '1':
+          await this.api.simulateBiometrics(this.device.id, { type: 'match', finger_id: 1 });
+          toast.show('Biometrics: Sent Fingerprint Match (ID 1)', 'success');
+          break;
+        case '2':
+          await this.api.simulateBiometrics(this.device.id, { type: 'unmatch' });
+          toast.show('Biometrics: Sent Fingerprint Reject', 'warning');
+          break;
+        case '3':
+          await this.api.setBatteryState(this.device.id, {
+            capacity_percent: 100,
+            ac_plugged: true,
+            status: 'Charging',
+            health: 'Good'
+          });
+          toast.show('Battery set to 100% (AC Charging)', 'success');
+          break;
+        case '4':
+          await this.api.setBatteryState(this.device.id, {
+            capacity_percent: 15,
+            ac_plugged: false,
+            status: 'Discharging',
+            health: 'Good'
+          });
+          toast.show('Battery set to 15% (Discharging / Warning alert)', 'warning');
+          break;
+        case '5':
+          await this.api.setSensorState(this.device.id, { type: 'acceleration', x: 0, y: 9.81, z: 0 });
+          toast.show('Sensor: Flat Table orientation applied', 'success');
+          break;
+        case '6':
+          await this.api.setSensorState(this.device.id, { type: 'acceleration', x: 0, y: 6.94, z: 6.94 });
+          toast.show('Sensor: 45° Portrait tilt applied', 'success');
+          break;
+        case '7':
+          await this.api.setSensorState(this.device.id, { type: 'acceleration', x: 6.94, y: 6.94, z: 0 });
+          toast.show('Sensor: 45° Landscape roll applied', 'success');
+          break;
+        case '8':
+          await this.api.setSensorState(this.device.id, { type: 'proximity', distance_cm: 0.5 });
+          toast.show('Sensor: Proximity NEAR (0.5cm) simulated', 'success');
+          break;
+        default:
+          toast.show('Invalid sensor option.', 'error');
+      }
+    } catch (err: unknown) {
+      toast.show(`Sensor simulation error: ${(err as { message?: string }).message || String(err)}`, 'error');
     }
   }
 

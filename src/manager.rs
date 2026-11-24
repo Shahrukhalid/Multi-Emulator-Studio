@@ -259,6 +259,46 @@ impl<E: Engine> Manager<E> {
         let device = self.store.get(id)?;
         self.engine.get_clipboard(&device)
     }
+    pub fn set_audio_state(&mut self, id: Uuid, volume: u32, muted: bool) -> Result<()> {
+        let device = self.store.get(id)?;
+        self.engine.set_audio_state(&device, volume, muted)
+    }
+    pub fn inject_audio_sample(&mut self, id: Uuid, sample_id: &str) -> Result<()> {
+        let device = self.store.get(id)?;
+        self.engine.inject_audio_sample(&device, sample_id)
+    }
+    pub fn get_audio_state(&mut self, id: Uuid) -> Result<crate::audio::AudioState> {
+        let device = self.store.get(id)?;
+        self.engine.get_audio_state(&device)
+    }
+    pub fn simulate_biometrics(
+        &mut self,
+        id: Uuid,
+        action: crate::sensor::BiometricAction,
+    ) -> Result<()> {
+        let device = self.store.get(id)?;
+        self.engine.simulate_biometrics(&device, action)
+    }
+    pub fn set_battery_state(
+        &mut self,
+        id: Uuid,
+        state: crate::sensor::BatteryState,
+    ) -> Result<()> {
+        let device = self.store.get(id)?;
+        self.engine.set_battery_state(&device, state)
+    }
+    pub fn set_sensor_state(
+        &mut self,
+        id: Uuid,
+        update: crate::sensor::SensorUpdate,
+    ) -> Result<()> {
+        let device = self.store.get(id)?;
+        self.engine.set_sensor_state(&device, update)
+    }
+    pub fn get_sensor_state(&mut self, id: Uuid) -> Result<crate::sensor::DeviceSensorState> {
+        let device = self.store.get(id)?;
+        self.engine.get_sensor_state(&device)
+    }
     pub fn list_macros(&self) -> Result<Vec<crate::macro_runner::MacroDefinition>> {
         self.store.list_macros()
     }

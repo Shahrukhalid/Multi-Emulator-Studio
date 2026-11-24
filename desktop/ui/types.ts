@@ -128,6 +128,14 @@ export type Request =
   | { action: 'delete_macro'; id: string }
   | { action: 'run_macro'; macro_id: string; device_id: string }
   | { action: 'run_macro_fleet'; macro_id: string; device_ids?: string[] }
+  | { action: 'set_audio_state'; id: string; volume: number; muted: boolean }
+  | { action: 'inject_audio_sample'; id: string; sample_id: string }
+  | { action: 'get_audio_state'; id: string }
+  | { action: 'get_audio_samples' }
+  | { action: 'simulate_biometrics'; id: string; biometric_action: BiometricAction }
+  | { action: 'set_battery_state'; id: string; state: BatteryState }
+  | { action: 'set_sensor_state'; id: string; update: SensorUpdate }
+  | { action: 'get_sensor_state'; id: string }
   | { action: 'list' }
   | { action: 'tick' }
   | { action: 'network' }
@@ -583,6 +591,48 @@ export interface MacroExecutionResult {
   total_steps: number;
   duration_ms: number;
   failure_reason?: string;
+}
+
+export interface AudioState {
+  enabled: boolean;
+  output_volume: number;
+  muted: boolean;
+  sample_rate: number;
+  channels: number;
+}
+
+export interface AudioSample {
+  id: string;
+  title: string;
+  category: string;
+  description: string;
+  duration_ms: number;
+}
+
+export type BiometricAction =
+  | { type: 'match'; finger_id?: number }
+  | { type: 'unmatch' }
+  | { type: 'enroll'; finger_id?: number };
+
+export interface BatteryState {
+  capacity_percent: number;
+  ac_plugged: boolean;
+  status: string;
+  health: string;
+}
+
+export type SensorUpdate =
+  | { type: 'acceleration'; x: number; y: number; z: number }
+  | { type: 'gyroscope'; x: number; y: number; z: number }
+  | { type: 'proximity'; distance_cm: number }
+  | { type: 'light'; lux: number };
+
+export interface DeviceSensorState {
+  battery: BatteryState;
+  accelerometer: [number, number, number];
+  gyroscope: [number, number, number];
+  proximity_cm: number;
+  light_lux: number;
 }
 
 export function validateDeviceSpec(spec: DeviceSpec): string | null {

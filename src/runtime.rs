@@ -187,4 +187,39 @@ pub trait Engine {
             "Clipboard retrieval is unavailable".into(),
         ))
     }
+    fn set_audio_state(&mut self, _: &Device, _volume: u32, _muted: bool) -> Result<()> {
+        Err(crate::Error::Unavailable(
+            "Audio state control is unavailable".into(),
+        ))
+    }
+    fn inject_audio_sample(&mut self, _: &Device, _sample_id: &str) -> Result<()> {
+        Err(crate::Error::Unavailable(
+            "Audio injection is unavailable".into(),
+        ))
+    }
+    fn get_audio_state(&mut self, _: &Device) -> Result<crate::audio::AudioState> {
+        Ok(crate::audio::AudioState::default())
+    }
+    fn simulate_biometrics(
+        &mut self,
+        _: &Device,
+        _action: crate::sensor::BiometricAction,
+    ) -> Result<()> {
+        Err(crate::Error::Unavailable(
+            "Biometrics simulation is unavailable".into(),
+        ))
+    }
+    fn set_battery_state(&mut self, _: &Device, _state: crate::sensor::BatteryState) -> Result<()> {
+        Err(crate::Error::Unavailable(
+            "Battery conditioning is unavailable".into(),
+        ))
+    }
+    fn set_sensor_state(&mut self, _: &Device, _update: crate::sensor::SensorUpdate) -> Result<()> {
+        Err(crate::Error::Unavailable(
+            "Sensor state update is unavailable".into(),
+        ))
+    }
+    fn get_sensor_state(&mut self, _: &Device) -> Result<crate::sensor::DeviceSensorState> {
+        Ok(crate::sensor::DeviceSensorState::default())
+    }
 }
