@@ -116,6 +116,13 @@ pub enum Request {
     IosShutdown {
         udid: String,
     },
+    BroadcastInstall {
+        device_ids: Option<Vec<Uuid>>,
+        path: PathBuf,
+    },
+    SynchronizedScreenshots {
+        device_ids: Option<Vec<Uuid>>,
+    },
 }
 pub struct Controller {
     sdk: Sdk,
@@ -283,6 +290,12 @@ impl Controller {
             Request::IosShutdown { udid } => {
                 self.ios.shutdown_simulator(&udid)?;
                 json!(true)
+            }
+            Request::BroadcastInstall { device_ids, path } => {
+                json!(self.manager.broadcast_install(device_ids, &path)?)
+            }
+            Request::SynchronizedScreenshots { device_ids } => {
+                json!(self.manager.synchronized_screenshots(device_ids)?)
             }
         })
     }

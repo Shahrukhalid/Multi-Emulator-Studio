@@ -11,7 +11,9 @@ import {
   ParsedCrash,
   DeviceTelemetry,
   IosRuntime,
-  IosSimulatorDevice
+  IosSimulatorDevice,
+  BroadcastInstallReport,
+  SynchronizedScreenshotsReport
 } from './types.js';
 
 declare const window: Window & {
@@ -71,6 +73,8 @@ export interface IApiClient {
   getIosDevices(): Promise<IosSimulatorDevice[]>;
   bootIosSimulator(udid: string): Promise<boolean>;
   shutdownIosSimulator(udid: string): Promise<boolean>;
+  broadcastInstall(device_ids?: string[], path?: string): Promise<BroadcastInstallReport>;
+  synchronizedScreenshots(device_ids?: string[]): Promise<SynchronizedScreenshotsReport>;
 }
 
 class TauriApiClient implements IApiClient {
@@ -229,6 +233,14 @@ class TauriApiClient implements IApiClient {
 
   shutdownIosSimulator(udid: string): Promise<boolean> {
     return this.dispatch<boolean>({ action: 'ios_shutdown', udid });
+  }
+
+  broadcastInstall(device_ids?: string[], path: string = ''): Promise<BroadcastInstallReport> {
+    return this.dispatch<BroadcastInstallReport>({ action: 'broadcast_install', device_ids, path });
+  }
+
+  synchronizedScreenshots(device_ids?: string[]): Promise<SynchronizedScreenshotsReport> {
+    return this.dispatch<SynchronizedScreenshotsReport>({ action: 'synchronized_screenshots', device_ids });
   }
 }
 
@@ -575,6 +587,39 @@ class BrowserPreviewClient implements IApiClient {
 
   async shutdownIosSimulator(_udid: string): Promise<boolean> {
     return true;
+  }
+
+  async broadcastInstall(_device_ids?: string[], path: string = 'app-release.apk'): Promise<BroadcastInstallReport> {
+    return {
+      package_name: path,
+      total_devices: this.mockDevices.length,
+      successful_devices: this.mockDevices.length,
+      failed_devices: 0,
+      total_duration_ms: 120,
+      results: this.mockDevices.map(d => ({
+        device_id: d.id,
+        device_name: d.spec.name,
+        success: true,
+        message: 'Successfully installed (preview mode)',
+        elapsed_ms: 60,
+      })),
+    };
+  }
+
+  async synchronizedScreenshots(_device_ids?: string[]): Promise<SynchronizedScreenshotsReport> {
+    const fallbackB64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==';
+    return {
+      timestamp_ms: Date.now(),
+      frames: this.mockDevices.map(d => ({
+        device_id: d.id,
+        device_name: d.spec.name,
+        hardware_profile: d.spec.hardware_profile,
+        width: d.spec.width,
+        height: d.spec.height,
+        png_base64: fallbackB64,
+        state: 'ready',
+      })),
+    };
   }
 }
 
