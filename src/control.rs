@@ -98,6 +98,10 @@ pub enum Request {
         id: Uuid,
         target: Option<String>,
     },
+    RunMatrixTest {
+        device_ids: Option<Vec<Uuid>>,
+        suite: Option<crate::test_runner::MatrixTestSuite>,
+    },
 }
 pub struct Controller {
     sdk: Sdk,
@@ -244,6 +248,9 @@ impl Controller {
             }
             Request::SetProxyTarget { id, target } => {
                 json!(self.manager.set_proxy_target(id, target.as_deref())?)
+            }
+            Request::RunMatrixTest { device_ids, suite } => {
+                json!(self.manager.run_matrix_test(device_ids, suite)?)
             }
         })
     }

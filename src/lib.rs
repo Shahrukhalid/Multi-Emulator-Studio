@@ -11,6 +11,7 @@ pub mod proxy;
 pub mod runtime;
 pub mod runtime_qa;
 pub mod storage;
+pub mod test_runner;
 mod video;
 
 pub use error::{Error, Result};

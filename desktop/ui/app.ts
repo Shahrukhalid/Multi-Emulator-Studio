@@ -127,8 +127,20 @@ export class App {
 
     // Test Matrix view initialization
     this.testMatrix = new TestMatrixComponent({
-      onRunMatrix: () => {
-        toast.show('Parallel test matrix execution started across devices', 'info');
+      onRunMatrix: async () => {
+        try {
+          this.testMatrix.setRunning(true);
+          toast.show('Starting parallel test matrix execution across devices (100% Free)...', 'info');
+          const report = await this.api.runMatrixTest();
+          this.testMatrix.applyReport(report);
+          toast.show(
+            `Matrix run complete: ${report.passed_devices}/${report.total_devices} devices passed in ${report.total_duration_ms}ms`,
+            report.failed_devices === 0 ? 'success' : 'warning'
+          );
+        } catch (e: any) {
+          this.testMatrix.setRunning(false);
+          toast.show(`Matrix run failed: ${e?.message || e}`, 'error');
+        }
       },
       onSelectStep: (suite, step) => {
         toast.show(`Selected test step: ${suite} > ${step}`, 'info');

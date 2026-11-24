@@ -239,6 +239,29 @@ impl<E: Engine> Manager<E> {
         let device = self.store.get(id)?;
         self.engine.set_proxy_target(&device, target)
     }
+    pub fn run_matrix_test(
+        &mut self,
+        device_ids: Option<Vec<Uuid>>,
+        suite: Option<crate::test_runner::MatrixTestSuite>,
+    ) -> Result<crate::test_runner::MatrixRunReport> {
+        let test_suite =
+            suite.unwrap_or_else(crate::test_runner::ParallelTestRunner::default_smoke_suite);
+        let target_devices = match device_ids {
+            Some(ids) if !ids.is_empty() => {
+                let mut devs = Vec::new();
+                for id in ids {
+                    devs.push(self.store.get(id)?);
+                }
+                devs
+            }
+            _ => self.store.list()?,
+        };
+        Ok(crate::test_runner::ParallelTestRunner::execute_matrix(
+            &mut self.engine,
+            &target_devices,
+            &test_suite,
+        ))
+    }
 }
 
 #[cfg(test)]

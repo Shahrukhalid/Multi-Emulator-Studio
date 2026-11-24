@@ -1,4 +1,4 @@
-import { MatrixTestSuite, MatrixDeviceSnapshot } from '../types.js';
+import { MatrixTestSuite, MatrixDeviceSnapshot, MatrixRunReport } from '../types.js';
 import { Icons } from '../icons.js';
 
 export interface TestMatrixCallbacks {
@@ -14,6 +14,7 @@ export class TestMatrixComponent {
   private selectedStepId = 'sales_tap_sales';
   private activeFilter: 'all' | 'passed' | 'failed' = 'all';
   private zoomLevel: 'small' | 'medium' | 'large' = 'medium';
+  private isRunning = false;
 
   constructor(private callbacks: TestMatrixCallbacks) {
     this.element = document.createElement('div');
@@ -106,9 +107,9 @@ export class TestMatrixComponent {
             <button class="zoom-btn ${this.zoomLevel === 'large' ? 'active' : ''}" data-zoom="large">L</button>
           </div>
 
-          <button class="btn-create-primary" id="btn-run-matrix-tests">
+          <button class="btn-create-primary" id="btn-run-matrix-tests" ${this.isRunning ? 'disabled style="opacity:0.7;"' : ''}>
             ${Icons.play}
-            <span>Run Matrix Test (Free)</span>
+            <span>${this.isRunning ? 'Executing Tests (Free)...' : 'Run Matrix Test (Free)'}</span>
           </button>
         </div>
       </div>
@@ -180,15 +181,19 @@ export class TestMatrixComponent {
 
                 <div class="matrix-phone-mockup">
                   <div class="matrix-phone-screen">
-                    <div class="matrix-screen-placeholder">
-                      <div class="screen-stat-chart">
-                        <div class="bar bar-1"></div>
-                        <div class="bar bar-2"></div>
-                        <div class="bar bar-3"></div>
-                        <div class="bar bar-4"></div>
-                      </div>
-                      <span class="screen-label">${dev.deviceName.split(' ')[0]}</span>
-                    </div>
+                    ${
+                      dev.screenshot
+                        ? `<img src="data:image/png;base64,${dev.screenshot}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 4px;" alt="${dev.deviceName} Screen" />`
+                        : `<div class="matrix-screen-placeholder">
+                            <div class="screen-stat-chart">
+                              <div class="bar bar-1"></div>
+                              <div class="bar bar-2"></div>
+                              <div class="bar bar-3"></div>
+                              <div class="bar bar-4"></div>
+                            </div>
+                            <span class="screen-label">${dev.deviceName.split(' ')[0]}</span>
+                          </div>`
+                    }
                   </div>
                 </div>
 
@@ -237,7 +242,28 @@ export class TestMatrixComponent {
 
     // Run button
     this.element.querySelector('#btn-run-matrix-tests')?.addEventListener('click', () => {
-      this.callbacks.onRunMatrix();
+      if (!this.isRunning) {
+        this.callbacks.onRunMatrix();
+      }
     });
+  }
+
+  public setRunning(running: boolean): void {
+    this.isRunning = running;
+    this.render();
+  }
+
+  public applyReport(report: MatrixRunReport): void {
+    this.isRunning = false;
+    this.devices = report.devices.map((d) => ({
+      deviceId: d.device_id,
+      deviceName: d.device_name,
+      osVersion: 'Android 15',
+      formFactor: 'phone',
+      status: d.status === 'passed' ? 'passed' : 'failed',
+      screenshot: d.latest_screenshot || undefined,
+      errorMessage: d.steps.find((s) => s.error)?.error || undefined
+    }));
+    this.render();
   }
 }

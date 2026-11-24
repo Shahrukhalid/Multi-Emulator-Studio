@@ -1338,6 +1338,34 @@ impl Engine for Android {
             Ok(true)
         }
     }
+    fn input_text(&mut self, d: &Device, text: &str) -> Result<()> {
+        let port = self.interactive_port(d)?;
+        let escaped = text.replace(' ', "%s");
+        run(
+            self.adb_for(port)
+                .args(["shell", "input", "text", &escaped]),
+            None,
+            Duration::from_secs(5),
+        )?;
+        Ok(())
+    }
+    fn launch_app(&mut self, d: &Device, package: &str) -> Result<()> {
+        let port = self.interactive_port(d)?;
+        run(
+            self.adb_for(port).args([
+                "shell",
+                "monkey",
+                "-p",
+                package,
+                "-c",
+                "android.intent.category.LAUNCHER",
+                "1",
+            ]),
+            None,
+            Duration::from_secs(5),
+        )?;
+        Ok(())
+    }
 }
 impl Drop for Android {
     fn drop(&mut self) {
