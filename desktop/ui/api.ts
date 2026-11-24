@@ -57,6 +57,7 @@ export interface IApiClient {
   setLocation(id: string, latitude: number, longitude: number, timezone: string): Promise<boolean>;
   getLogcat(id: string, lines?: number): Promise<string>;
   rotateDevice(id: string, orientation: 'portrait' | 'landscape'): Promise<boolean>;
+  setProxyTarget(id: string, target?: string): Promise<boolean>;
 }
 
 class TauriApiClient implements IApiClient {
@@ -184,6 +185,10 @@ class TauriApiClient implements IApiClient {
   rotateDevice(id: string, orientation: 'portrait' | 'landscape'): Promise<boolean> {
     return this.dispatch<boolean>({ action: 'rotate', id, orientation });
   }
+
+  setProxyTarget(id: string, target?: string): Promise<boolean> {
+    return this.dispatch<boolean>({ action: 'set_proxy_target', id, target });
+  }
 }
 
 /**
@@ -272,6 +277,7 @@ class BrowserPreviewClient implements IApiClient {
         return (await this.createDevice(request.spec)) as unknown as T;
       case 'set_location':
       case 'rotate':
+      case 'set_proxy_target':
         return true as unknown as T;
       case 'get_logcat':
         return (await this.getLogcat(request.id, request.lines)) as unknown as T;
@@ -419,6 +425,10 @@ class BrowserPreviewClient implements IApiClient {
   }
 
   async rotateDevice(_id: string, _orientation: 'portrait' | 'landscape'): Promise<boolean> {
+    return true;
+  }
+
+  async setProxyTarget(_id: string, _target?: string): Promise<boolean> {
     return true;
   }
 }

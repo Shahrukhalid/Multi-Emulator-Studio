@@ -94,6 +94,10 @@ pub enum Request {
         id: Uuid,
         orientation: String,
     },
+    SetProxyTarget {
+        id: Uuid,
+        target: Option<String>,
+    },
 }
 pub struct Controller {
     sdk: Sdk,
@@ -237,6 +241,9 @@ impl Controller {
             Request::Rotate { id, orientation } => {
                 self.manager.rotate(id, &orientation)?;
                 json!(true)
+            }
+            Request::SetProxyTarget { id, target } => {
+                json!(self.manager.set_proxy_target(id, target.as_deref())?)
             }
         })
     }

@@ -7,6 +7,7 @@ pub mod managed_sdk;
 pub mod manager;
 pub mod model;
 pub mod network;
+pub mod proxy;
 pub mod runtime;
 pub mod runtime_qa;
 pub mod storage;

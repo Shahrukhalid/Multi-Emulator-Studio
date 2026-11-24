@@ -235,6 +235,10 @@ impl<E: Engine> Manager<E> {
         let device = self.store.get(id)?;
         self.engine.rotate(&device, orientation)
     }
+    pub fn set_proxy_target(&mut self, id: Uuid, target: Option<&str>) -> Result<bool> {
+        let device = self.store.get(id)?;
+        self.engine.set_proxy_target(&device, target)
+    }
 }
 
 #[cfg(test)]

@@ -555,6 +555,7 @@ pub struct Android {
     active: HashMap<Uuid, Instance>,
     crashed: HashMap<Uuid, String>,
     video: HashMap<Uuid, crate::video::Capture>,
+    proxies: HashMap<Uuid, std::sync::Arc<crate::proxy::DynamicProxyRouter>>,
 }
 impl Android {
     pub fn new(sdk: Sdk, home: PathBuf) -> Result<Self> {
@@ -566,6 +567,7 @@ impl Android {
             active: HashMap::new(),
             crashed: HashMap::new(),
             video: HashMap::new(),
+            proxies: HashMap::new(),
         })
     }
     pub fn sdk(&self) -> &Sdk {
@@ -893,12 +895,21 @@ impl Engine for Android {
             "-gpu",
             d.spec.graphics_mode.emulator_arg(),
         ]);
-        if let Some(proxy) = &d.spec.proxy {
-            let trimmed = proxy.trim();
-            if !trimmed.is_empty() {
-                launch.args(["-http-proxy", trimmed]);
+        let initial_proxy = d
+            .spec
+            .proxy
+            .as_ref()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
+        let router = match crate::proxy::DynamicProxyRouter::start(initial_proxy) {
+            Ok(r) => {
+                let arc_r = std::sync::Arc::new(r);
+                let proxy_arg = format!("127.0.0.1:{}", arc_r.port());
+                launch.args(["-http-proxy", &proxy_arg]);
+                Some(arc_r)
             }
-        }
+            Err(_) => None,
+        };
         if std::env::var_os("MES_HEADLESS").as_deref() != Some(std::ffi::OsStr::new("0")) {
             launch.arg("-no-window");
         }
@@ -907,6 +918,9 @@ impl Engine for Android {
             .stdout(log.try_clone()?)
             .stderr(log)
             .spawn()?;
+        if let Some(r) = router {
+            self.proxies.insert(d.id, r);
+        }
         self.active.insert(
             d.id,
             Instance {
@@ -1033,6 +1047,9 @@ impl Engine for Android {
     }
     fn stop(&mut self, d: &Device) -> Result<()> {
         self.video.remove(&d.id);
+        if let Some(r) = self.proxies.remove(&d.id) {
+            r.stop();
+        }
         let Some(port) = self.active.get(&d.id).map(|i| i.port) else {
             self.assert_idle(d)?;
             self.crashed.remove(&d.id);
@@ -1310,6 +1327,16 @@ impl Engine for Android {
             Duration::from_secs(3),
         )?;
         Ok(())
+    }
+    fn set_proxy_target(&mut self, d: &Device, target: Option<&str>) -> Result<bool> {
+        if let Some(router) = self.proxies.get(&d.id) {
+            router.set_target(target.map(|s| s.to_string()));
+            Ok(true)
+        } else {
+            let r = crate::proxy::DynamicProxyRouter::start(target.map(|s| s.to_string()))?;
+            self.proxies.insert(d.id, std::sync::Arc::new(r));
+            Ok(true)
+        }
     }
 }
 impl Drop for Android {

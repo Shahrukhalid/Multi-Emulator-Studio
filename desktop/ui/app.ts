@@ -442,10 +442,11 @@ export class App {
     const modal = new LocationModalComponent(device, {
       onApply: async (lat, lon, tz, proxy) => {
         await this.api.setLocation(device.id, lat, lon, tz);
-        if (proxy) {
+        if (proxy !== undefined) {
           device.spec.proxy = proxy;
+          await this.api.setProxyTarget(device.id, proxy);
         }
-        toast.show(`Location synchronized: ${lat}, ${lon} (${tz})`, 'success');
+        toast.show(`Location & proxy dynamically synchronized (${tz})`, 'success');
       },
       onClose: () => this.closeModal()
     });

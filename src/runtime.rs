@@ -154,4 +154,9 @@ pub trait Engine {
             "Screen rotation is unavailable".into(),
         ))
     }
+    fn set_proxy_target(&mut self, _: &Device, _target: Option<&str>) -> Result<bool> {
+        Err(crate::Error::Unavailable(
+            "Dynamic proxy routing is unavailable".into(),
+        ))
+    }
 }
