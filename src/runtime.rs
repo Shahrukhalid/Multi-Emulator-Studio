@@ -265,4 +265,52 @@ pub trait Engine {
             "File transfer to device is unavailable".into(),
         ))
     }
+    fn get_performance_sample(&mut self, d: &Device) -> Result<crate::profiler::PerformanceSample> {
+        Ok(crate::profiler::ProfilerEngine::create_mock_sample(
+            &d.id.to_string(),
+            d.spec.ram_mb as u64,
+        ))
+    }
+    fn dispatch_deep_link(
+        &mut self,
+        _: &Device,
+        _req: &crate::intent::DeepLinkRequest,
+    ) -> Result<String> {
+        Err(crate::Error::Unavailable(
+            "Deep link dispatch is unavailable".into(),
+        ))
+    }
+    fn dispatch_intent(
+        &mut self,
+        _: &Device,
+        _req: &crate::intent::IntentRequest,
+    ) -> Result<String> {
+        Err(crate::Error::Unavailable(
+            "Custom intent dispatch is unavailable".into(),
+        ))
+    }
+    fn simulate_notification(
+        &mut self,
+        _: &Device,
+        _req: &crate::intent::NotificationSimulationRequest,
+    ) -> Result<String> {
+        Err(crate::Error::Unavailable(
+            "Notification simulation is unavailable".into(),
+        ))
+    }
+    fn enable_devtools_forwarding(
+        &mut self,
+        _: &Device,
+        local_port: u16,
+        _socket: Option<&str>,
+    ) -> Result<u16> {
+        Ok(local_port)
+    }
+    fn list_devtools_targets(
+        &mut self,
+        _: &Device,
+        local_port: u16,
+    ) -> Result<Vec<crate::devtools::DevToolsTarget>> {
+        Ok(crate::devtools::DevToolsBridge::mock_targets(local_port))
+    }
 }

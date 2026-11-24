@@ -1718,6 +1718,86 @@ impl Engine for Android {
 
         Ok(format!("Pushed '{file_name}' to '{target_remote}'"))
     }
+    fn get_performance_sample(&mut self, d: &Device) -> Result<crate::profiler::PerformanceSample> {
+        Ok(crate::profiler::ProfilerEngine::create_mock_sample(
+            &d.id.to_string(),
+            d.spec.ram_mb as u64,
+        ))
+    }
+    fn dispatch_deep_link(
+        &mut self,
+        d: &Device,
+        req: &crate::intent::DeepLinkRequest,
+    ) -> Result<String> {
+        let port = self.interactive_port(d)?;
+        let args = crate::intent::IntentDispatcher::build_deep_link_args(req);
+        let out = run(
+            self.adb_for(port).args(&args),
+            None,
+            Duration::from_secs(10),
+        )?;
+        Ok(format!(
+            "Deep link dispatched to '{}': {}",
+            req.uri,
+            out.trim()
+        ))
+    }
+    fn dispatch_intent(
+        &mut self,
+        d: &Device,
+        req: &crate::intent::IntentRequest,
+    ) -> Result<String> {
+        let port = self.interactive_port(d)?;
+        let args = crate::intent::IntentDispatcher::build_intent_args(req);
+        let out = run(
+            self.adb_for(port).args(&args),
+            None,
+            Duration::from_secs(10),
+        )?;
+        Ok(format!(
+            "Intent '{}' dispatched: {}",
+            req.action,
+            out.trim()
+        ))
+    }
+    fn simulate_notification(
+        &mut self,
+        d: &Device,
+        req: &crate::intent::NotificationSimulationRequest,
+    ) -> Result<String> {
+        let port = self.interactive_port(d)?;
+        let args = crate::intent::IntentDispatcher::build_notification_args(req);
+        let out = run(
+            self.adb_for(port).args(&args),
+            None,
+            Duration::from_secs(10),
+        )?;
+        Ok(format!(
+            "Notification '{}' simulated: {}",
+            req.title,
+            out.trim()
+        ))
+    }
+    fn enable_devtools_forwarding(
+        &mut self,
+        d: &Device,
+        local_port: u16,
+        socket: Option<&str>,
+    ) -> Result<u16> {
+        let port = self.interactive_port(d)?;
+        let target_socket =
+            socket.unwrap_or_else(|| crate::devtools::DevToolsBridge::default_socket());
+        let args = crate::devtools::DevToolsBridge::build_forward_args(local_port, target_socket);
+        run(self.adb_for(port).args(&args), None, Duration::from_secs(5))?;
+        Ok(local_port)
+    }
+    fn list_devtools_targets(
+        &mut self,
+        _d: &Device,
+        local_port: u16,
+    ) -> Result<Vec<crate::devtools::DevToolsTarget>> {
+        Ok(crate::devtools::DevToolsBridge::mock_targets(local_port))
+    }
 }
 impl Drop for Android {
     fn drop(&mut self) {

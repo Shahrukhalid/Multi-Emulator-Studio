@@ -145,6 +145,13 @@ export type Request =
   | { action: 'delete_snapshot'; id: string; snapshot_id: string; name: string }
   | { action: 'check_updates'; channel?: UpdateChannel }
   | { action: 'push_file'; id: string; path: string; remote_path?: string }
+  | { action: 'get_performance_sample'; id: string }
+  | { action: 'export_profile_csv'; id: string }
+  | { action: 'dispatch_deep_link'; id: string; req: DeepLinkRequest }
+  | { action: 'dispatch_intent'; id: string; req: IntentRequest }
+  | { action: 'simulate_notification'; id: string; req: NotificationSimulationRequest }
+  | { action: 'enable_devtools_forwarding'; id: string; local_port?: number; socket?: string }
+  | { action: 'list_devtools_targets'; id: string; local_port?: number }
   | { action: 'list' }
   | { action: 'tick' }
   | { action: 'network' }
@@ -711,6 +718,60 @@ export interface UpdateCheckResult {
   release_date: string;
   release_notes: string;
   download_url?: string;
+}
+
+export interface PerformanceSample {
+  timestamp_ms: number;
+  cpu_percent: number;
+  ram_used_mb: number;
+  ram_total_mb: number;
+  ram_dalvik_mb: number;
+  ram_native_mb: number;
+  ram_graphics_mb: number;
+  fps: number;
+  jank_frames: number;
+  battery_temp_c: number;
+}
+
+export interface DeepLinkRequest {
+  device_id: string;
+  uri: string;
+  package?: string;
+}
+
+export interface IntentExtra {
+  key: string;
+  value_type: 'string' | 'int' | 'bool' | 'float';
+  value: string;
+}
+
+export interface IntentRequest {
+  device_id: string;
+  action: string;
+  data_uri?: string;
+  mime_type?: string;
+  categories?: string[];
+  extras?: IntentExtra[];
+  flags?: string[];
+}
+
+export interface NotificationSimulationRequest {
+  device_id: string;
+  title: string;
+  body: string;
+  channel_id?: string;
+  priority?: string;
+  tag?: string;
+  notification_id?: number;
+}
+
+export interface DevToolsTarget {
+  id: string;
+  title: string;
+  type: string;
+  url: string;
+  devtools_frontend_url: string;
+  web_socket_debugger_url: string;
 }
 
 export function validateDeviceSpec(spec: DeviceSpec): string | null {

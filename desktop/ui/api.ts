@@ -31,7 +31,12 @@ import {
   CameraPatternInfo,
   Snapshot,
   UpdateChannel,
-  UpdateCheckResult
+  UpdateCheckResult,
+  PerformanceSample,
+  DeepLinkRequest,
+  IntentRequest,
+  NotificationSimulationRequest,
+  DevToolsTarget
 } from './types.js';
 
 declare const window: Window & {
@@ -123,6 +128,13 @@ export interface IApiClient {
   deleteSnapshot(id: string, snapshotId: string, name: string): Promise<boolean>;
   checkForUpdates(channel?: UpdateChannel): Promise<UpdateCheckResult>;
   pushFile(id: string, path: string, remote_path?: string): Promise<string>;
+  getPerformanceSample(id: string): Promise<PerformanceSample>;
+  exportProfileCsv(id: string): Promise<string>;
+  dispatchDeepLink(req: DeepLinkRequest): Promise<string>;
+  dispatchIntent(req: IntentRequest): Promise<string>;
+  simulateNotification(req: NotificationSimulationRequest): Promise<string>;
+  enableDevToolsForwarding(id: string, local_port?: number, socket?: string): Promise<number>;
+  listDevToolsTargets(id: string, local_port?: number): Promise<DevToolsTarget[]>;
 }
 
 class TauriApiClient implements IApiClient {
@@ -410,6 +422,34 @@ class TauriApiClient implements IApiClient {
   pushFile(id: string, path: string, remote_path?: string): Promise<string> {
     return this.dispatch<string>({ action: 'push_file', id, path, remote_path });
   }
+
+  getPerformanceSample(id: string): Promise<PerformanceSample> {
+    return this.dispatch<PerformanceSample>({ action: 'get_performance_sample', id });
+  }
+
+  exportProfileCsv(id: string): Promise<string> {
+    return this.dispatch<string>({ action: 'export_profile_csv', id });
+  }
+
+  dispatchDeepLink(req: DeepLinkRequest): Promise<string> {
+    return this.dispatch<string>({ action: 'dispatch_deep_link', id: req.device_id, req });
+  }
+
+  dispatchIntent(req: IntentRequest): Promise<string> {
+    return this.dispatch<string>({ action: 'dispatch_intent', id: req.device_id, req });
+  }
+
+  simulateNotification(req: NotificationSimulationRequest): Promise<string> {
+    return this.dispatch<string>({ action: 'simulate_notification', id: req.device_id, req });
+  }
+
+  enableDevToolsForwarding(id: string, local_port?: number, socket?: string): Promise<number> {
+    return this.dispatch<number>({ action: 'enable_devtools_forwarding', id, local_port, socket });
+  }
+
+  listDevToolsTargets(id: string, local_port?: number): Promise<DevToolsTarget[]> {
+    return this.dispatch<DevToolsTarget[]>({ action: 'list_devtools_targets', id, local_port });
+  }
 }
 
 /**
@@ -559,6 +599,20 @@ class BrowserPreviewClient implements IApiClient {
         return (await this.checkForUpdates(request.channel)) as unknown as T;
       case 'push_file':
         return (await this.pushFile(request.id, request.path, request.remote_path)) as unknown as T;
+      case 'get_performance_sample':
+        return (await this.getPerformanceSample(request.id)) as unknown as T;
+      case 'export_profile_csv':
+        return (await this.exportProfileCsv(request.id)) as unknown as T;
+      case 'dispatch_deep_link':
+        return (await this.dispatchDeepLink(request.req)) as unknown as T;
+      case 'dispatch_intent':
+        return (await this.dispatchIntent(request.req)) as unknown as T;
+      case 'simulate_notification':
+        return (await this.simulateNotification(request.req)) as unknown as T;
+      case 'enable_devtools_forwarding':
+        return (await this.enableDevToolsForwarding(request.id, request.local_port, request.socket)) as unknown as T;
+      case 'list_devtools_targets':
+        return (await this.listDevToolsTargets(request.id, request.local_port)) as unknown as T;
       case 'get_logcat':
         return (await this.getLogcat(request.id, request.lines)) as unknown as T;
       case 'start':
@@ -1241,6 +1295,66 @@ class BrowserPreviewClient implements IApiClient {
     const filename = path.split(/[/\\]/).pop() || 'file';
     const target = remote_path || (path.toLowerCase().endsWith('.apk') ? `/data/local/tmp/${filename}` : `/sdcard/Download/${filename}`);
     return `[Preview] Pushed ${filename} to ${target}`;
+  }
+
+  async getPerformanceSample(_id: string): Promise<PerformanceSample> {
+    return {
+      timestamp_ms: Date.now(),
+      cpu_percent: 18.5,
+      ram_used_mb: 1850,
+      ram_total_mb: 4096,
+      ram_dalvik_mb: 780,
+      ram_native_mb: 650,
+      ram_graphics_mb: 420,
+      fps: 59.8,
+      jank_frames: 0,
+      battery_temp_c: 31.4,
+    };
+  }
+
+  async exportProfileCsv(_id: string): Promise<string> {
+    return (
+      'timestamp_ms,cpu_percent,ram_used_mb,ram_total_mb,ram_dalvik_mb,ram_native_mb,ram_graphics_mb,fps,jank_frames,battery_temp_c\n' +
+      `${Date.now()},18.5,1850,4096,780,650,420,59.8,0,31.4\n`
+    );
+  }
+
+  async dispatchDeepLink(req: DeepLinkRequest): Promise<string> {
+    return `[Preview] Dispatched deep link: ${req.uri}`;
+  }
+
+  async dispatchIntent(req: IntentRequest): Promise<string> {
+    return `[Preview] Dispatched intent: ${req.action}`;
+  }
+
+  async simulateNotification(req: NotificationSimulationRequest): Promise<string> {
+    return `[Preview] Simulated notification: "${req.title}" - ${req.body}`;
+  }
+
+  async enableDevToolsForwarding(_id: string, local_port?: number, _socket?: string): Promise<number> {
+    return local_port || 9222;
+  }
+
+  async listDevToolsTargets(_id: string, local_port?: number): Promise<DevToolsTarget[]> {
+    const port = local_port || 9222;
+    return [
+      {
+        id: 'webview-main-window',
+        title: 'Mobile App Web Container — Checkout Activity',
+        type: 'page',
+        url: 'https://shop.example.com/mobile/checkout',
+        devtools_frontend_url: `devtools://devtools/bundled/inspector.html?ws=127.0.0.1:${port}/devtools/page/webview-main-window`,
+        web_socket_debugger_url: `ws://127.0.0.1:${port}/devtools/page/webview-main-window`,
+      },
+      {
+        id: 'webview-auth-widget',
+        title: 'OAuth2 Consent & Passkey Biometric Dialog',
+        type: 'iframe',
+        url: 'https://auth.example.com/oauth2/dialog',
+        devtools_frontend_url: `devtools://devtools/bundled/inspector.html?ws=127.0.0.1:${port}/devtools/page/webview-auth-widget`,
+        web_socket_debugger_url: `ws://127.0.0.1:${port}/devtools/page/webview-auth-widget`,
+      },
+    ];
   }
 }
 
