@@ -1366,6 +1366,56 @@ impl Engine for Android {
         )?;
         Ok(())
     }
+    fn set_network_profile(&mut self, d: &Device, profile_id: &str) -> Result<()> {
+        let port = self.interactive_port(d)?;
+        let profile = crate::network::find_profile(profile_id)
+            .unwrap_or_else(|| crate::network::standard_network_profiles()[0].clone());
+
+        if profile.id == "offline" {
+            let _ = run(
+                self.adb_for(port)
+                    .args(["emu", "network", "speed", "0", "0"]),
+                None,
+                Duration::from_secs(3),
+            );
+            let _ = run(
+                self.adb_for(port).args([
+                    "shell",
+                    "cmd",
+                    "connectivity",
+                    "airplane-mode",
+                    "enable",
+                ]),
+                None,
+                Duration::from_secs(3),
+            );
+        } else {
+            let _ = run(
+                self.adb_for(port).args([
+                    "shell",
+                    "cmd",
+                    "connectivity",
+                    "airplane-mode",
+                    "disable",
+                ]),
+                None,
+                Duration::from_secs(3),
+            );
+            let _ = run(
+                self.adb_for(port)
+                    .args(["emu", "network", "speed", &profile.speed_preset]),
+                None,
+                Duration::from_secs(3),
+            );
+            let _ = run(
+                self.adb_for(port)
+                    .args(["emu", "network", "delay", &profile.delay_preset]),
+                None,
+                Duration::from_secs(3),
+            );
+        }
+        Ok(())
+    }
 }
 impl Drop for Android {
     fn drop(&mut self) {

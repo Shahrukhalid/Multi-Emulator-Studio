@@ -11,6 +11,7 @@ pub mod manager;
 pub mod model;
 pub mod network;
 pub mod proxy;
+pub mod report;
 pub mod runtime;
 pub mod runtime_qa;
 pub mod storage;

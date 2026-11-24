@@ -13,7 +13,8 @@ import {
   IosRuntime,
   IosSimulatorDevice,
   BroadcastInstallReport,
-  SynchronizedScreenshotsReport
+  SynchronizedScreenshotsReport,
+  NetworkProfile
 } from './types.js';
 
 declare const window: Window & {
@@ -75,6 +76,9 @@ export interface IApiClient {
   shutdownIosSimulator(udid: string): Promise<boolean>;
   broadcastInstall(device_ids?: string[], path?: string): Promise<BroadcastInstallReport>;
   synchronizedScreenshots(device_ids?: string[]): Promise<SynchronizedScreenshotsReport>;
+  setNetworkProfile(id: string, profile: string): Promise<boolean>;
+  getNetworkProfiles(): Promise<NetworkProfile[]>;
+  generateReportHtml(matrix: MatrixRunReport, crashes?: ParsedCrash[], fleet?: BroadcastInstallReport): Promise<string>;
 }
 
 class TauriApiClient implements IApiClient {
@@ -241,6 +245,18 @@ class TauriApiClient implements IApiClient {
 
   synchronizedScreenshots(device_ids?: string[]): Promise<SynchronizedScreenshotsReport> {
     return this.dispatch<SynchronizedScreenshotsReport>({ action: 'synchronized_screenshots', device_ids });
+  }
+
+  setNetworkProfile(id: string, profile: string): Promise<boolean> {
+    return this.dispatch<boolean>({ action: 'set_network_profile', id, profile });
+  }
+
+  getNetworkProfiles(): Promise<NetworkProfile[]> {
+    return this.dispatch<NetworkProfile[]>({ action: 'get_network_profiles' });
+  }
+
+  generateReportHtml(matrix: MatrixRunReport, crashes?: ParsedCrash[], fleet?: BroadcastInstallReport): Promise<string> {
+    return this.dispatch<string>({ action: 'generate_report_html', matrix, crashes, fleet });
   }
 }
 
@@ -620,6 +636,24 @@ class BrowserPreviewClient implements IApiClient {
         state: 'ready',
       })),
     };
+  }
+
+  async setNetworkProfile(_id: string, _profile: string): Promise<boolean> {
+    return true;
+  }
+
+  async getNetworkProfiles(): Promise<NetworkProfile[]> {
+    return [
+      { id: 'full', name: '5G / Unthrottled Fiber', speed_preset: 'full', delay_preset: 'none', download_kbps: 100000, upload_kbps: 50000, latency_ms: 5, description: 'Zero latency and unlimited bandwidth' },
+      { id: 'lte', name: '4G LTE Mobile', speed_preset: 'lte', delay_preset: 'lte', download_kbps: 30000, upload_kbps: 15000, latency_ms: 30, description: 'High-speed 4G LTE cellular connection' },
+      { id: 'umts', name: '3G / Slow Mobile (UMTS)', speed_preset: 'umts', delay_preset: 'umts', download_kbps: 2000, upload_kbps: 500, latency_ms: 150, description: 'Constrained mobile bitrate' },
+      { id: 'edge', name: '2G / Constrained (EDGE)', speed_preset: 'edge', delay_preset: 'edge', download_kbps: 250, upload_kbps: 64, latency_ms: 400, description: 'High latency mobile link' },
+      { id: 'offline', name: 'Offline / Flight Mode', speed_preset: 'offline', delay_preset: 'none', download_kbps: 0, upload_kbps: 0, latency_ms: 0, description: 'Simulate disconnected network' }
+    ];
+  }
+
+  async generateReportHtml(matrix: MatrixRunReport, _crashes?: ParsedCrash[], _fleet?: BroadcastInstallReport): Promise<string> {
+    return `<!DOCTYPE html><html><body><h1>Multi-Emulator Studio Report</h1><p>Suite: ${matrix.suite_name}</p></body></html>`;
   }
 }
 

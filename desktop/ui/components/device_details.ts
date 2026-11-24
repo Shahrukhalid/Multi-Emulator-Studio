@@ -11,6 +11,7 @@ export interface DeviceDetailsCallbacks {
   onDelete: (device: Device) => void;
   onInstallApk: (device: Device) => void;
   onScanDiagnostics?: (device: Device) => void;
+  onSetNetworkProfile?: (device: Device, profileId: string) => void;
 }
 
 export class DeviceDetailsComponent {
@@ -18,7 +19,7 @@ export class DeviceDetailsComponent {
   private device: Device;
   private status: Status | null;
   private callbacks: DeviceDetailsCallbacks;
-  private activeSubTab: 'overview' | 'apps' | 'files' | 'settings' | 'diagnostics' = 'overview';
+  private activeSubTab: 'overview' | 'apps' | 'network' | 'files' | 'settings' | 'diagnostics' = 'overview';
   private telemetry: DeviceTelemetry | null = null;
 
   constructor(device: Device, status: Status | null, callbacks: DeviceDetailsCallbacks) {
@@ -95,6 +96,7 @@ export class DeviceDetailsComponent {
           <nav class="details-subnav" aria-label="Device tabs">
             <button class="details-tab-btn ${this.activeSubTab === 'overview' ? 'active' : ''}" data-subtab="overview">Overview</button>
             <button class="details-tab-btn ${this.activeSubTab === 'apps' ? 'active' : ''}" data-subtab="apps">Apps</button>
+            <button class="details-tab-btn ${this.activeSubTab === 'network' ? 'active' : ''}" data-subtab="network">Network</button>
             <button class="details-tab-btn ${this.activeSubTab === 'files' ? 'active' : ''}" data-subtab="files">Files</button>
             <button class="details-tab-btn ${this.activeSubTab === 'settings' ? 'active' : ''}" data-subtab="settings">Settings</button>
             <button class="details-tab-btn ${this.activeSubTab === 'diagnostics' ? 'active' : ''}" data-subtab="diagnostics">Diagnostics</button>
@@ -133,6 +135,15 @@ export class DeviceDetailsComponent {
     this.element.querySelector('#btn-details-delete')?.addEventListener('click', () => this.callbacks.onDelete(this.device));
     this.element.querySelector('#btn-details-apk')?.addEventListener('click', () => this.callbacks.onInstallApk(this.device));
     this.element.querySelector('#btn-scan-diagnostics')?.addEventListener('click', () => this.callbacks.onScanDiagnostics?.(this.device));
+
+    this.element.querySelectorAll<HTMLButtonElement>('.btn-select-profile').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const profile = btn.dataset.profile;
+        if (profile) {
+          this.callbacks.onSetNetworkProfile?.(this.device, profile);
+        }
+      });
+    });
 
     this.element.querySelectorAll<HTMLButtonElement>('.details-tab-btn').forEach((btn) => {
       btn.addEventListener('click', () => {
@@ -214,6 +225,62 @@ export class DeviceDetailsComponent {
           <div class="storage-bar-wrapper" style="margin-top: 16px;">
             <div class="storage-bar"><div class="storage-fill" style="width: 25%;"></div></div>
             <span class="form-helper-text">2.1 GB used of ${Math.round(spec.disk_mb / 1024)} GB</span>
+          </div>
+        </div>
+      `;
+    }
+
+    if (this.activeSubTab === 'network') {
+      const isRunning = this.status?.state === 'ready';
+      return `
+        <div class="info-table-card">
+          <h3 class="section-title">Network Conditioning & Bandwidth Shaper</h3>
+          <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 16px;">
+            Simulate realistic mobile carrier conditions, latency throttling, and offline resilience for this device.
+          </p>
+
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 20px;">
+            <div style="border: 1px solid var(--border-subtle); border-radius: 10px; padding: 14px; background: var(--bg-secondary);">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                <strong style="font-size: 13px;">⚡ 5G / Fiber</strong>
+                <span style="font-size: 10px; color: var(--accent-success); font-weight: 600;">5ms · 100M</span>
+              </div>
+              <p style="font-size: 11px; color: var(--text-secondary); margin: 0 0 10px;">Unthrottled maximum throughput</p>
+              <button class="filter-pill btn-select-profile" data-profile="full" ${!isRunning ? 'disabled style="opacity:0.5;"' : ''}>Apply 5G</button>
+            </div>
+
+            <div style="border: 1px solid var(--border-subtle); border-radius: 10px; padding: 14px; background: var(--bg-secondary);">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                <strong style="font-size: 13px;">📶 4G LTE</strong>
+                <span style="font-size: 10px; color: var(--accent-primary); font-weight: 600;">30ms · 30M</span>
+              </div>
+              <p style="font-size: 11px; color: var(--text-secondary); margin: 0 0 10px;">High-speed cellular connection</p>
+              <button class="filter-pill btn-select-profile" data-profile="lte" ${!isRunning ? 'disabled style="opacity:0.5;"' : ''}>Apply 4G</button>
+            </div>
+
+            <div style="border: 1px solid var(--border-subtle); border-radius: 10px; padding: 14px; background: var(--bg-secondary);">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                <strong style="font-size: 13px;">🐢 3G UMTS</strong>
+                <span style="font-size: 10px; color: var(--accent-warning); font-weight: 600;">150ms · 2M</span>
+              </div>
+              <p style="font-size: 11px; color: var(--text-secondary); margin: 0 0 10px;">Slow mobile network latency</p>
+              <button class="filter-pill btn-select-profile" data-profile="umts" ${!isRunning ? 'disabled style="opacity:0.5;"' : ''}>Apply 3G</button>
+            </div>
+
+            <div style="border: 1px solid var(--border-subtle); border-radius: 10px; padding: 14px; background: var(--bg-secondary);">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                <strong style="font-size: 13px;">✈️ Offline Mode</strong>
+                <span style="font-size: 10px; color: var(--accent-danger); font-weight: 600;">Flight Mode</span>
+              </div>
+              <p style="font-size: 11px; color: var(--text-secondary); margin: 0 0 10px;">Test offline caching & recovery</p>
+              <button class="filter-pill btn-select-profile" data-profile="offline" ${!isRunning ? 'disabled style="opacity:0.5;"' : ''}>Set Offline</button>
+            </div>
+          </div>
+
+          <div style="padding: 12px; border-radius: 8px; background: var(--bg-surface-subtle); font-size: 12px; color: var(--text-secondary);">
+            <strong>Network Topology:</strong>
+            <span>Addresses: <code>${(this.status?.addresses || []).join(', ') || '127.0.0.1'}</code></span>
+            ${spec.proxy ? ` · Proxy: <code>${spec.proxy}</code>` : ' · Proxy: <code>Direct Egress</code>'}
           </div>
         </div>
       `;

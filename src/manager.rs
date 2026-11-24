@@ -239,6 +239,10 @@ impl<E: Engine> Manager<E> {
         let device = self.store.get(id)?;
         self.engine.set_proxy_target(&device, target)
     }
+    pub fn set_network_profile(&mut self, id: Uuid, profile_id: &str) -> Result<()> {
+        let device = self.store.get(id)?;
+        self.engine.set_network_profile(&device, profile_id)
+    }
     pub fn run_matrix_test(
         &mut self,
         device_ids: Option<Vec<Uuid>>,

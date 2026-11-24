@@ -169,4 +169,9 @@ pub trait Engine {
             "App launch is unavailable".into(),
         ))
     }
+    fn set_network_profile(&mut self, _: &Device, _profile_id: &str) -> Result<()> {
+        Err(crate::Error::Unavailable(
+            "Network conditioning is unavailable".into(),
+        ))
+    }
 }
