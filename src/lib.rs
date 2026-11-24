@@ -1,6 +1,7 @@
 pub mod android;
 pub mod budget;
 pub mod control;
+pub mod diagnostics;
 pub mod error;
 pub mod host;
 pub mod managed_sdk;

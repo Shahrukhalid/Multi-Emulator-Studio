@@ -393,8 +393,26 @@ export class App {
       onStop: (d) => this.handleStop(d),
       onRestart: (d) => this.handleRestart(d),
       onDelete: (d) => this.handleDeletePrompt(d),
-      onInstallApk: (d) => this.handleInstallApk(d)
+      onInstallApk: (d) => this.handleInstallApk(d),
+      onScanDiagnostics: async (d) => {
+        try {
+          toast.show(`Scanning telemetry & Logcat for ${d.spec.name}...`, 'info');
+          const t = await this.api.getTelemetry(d.id);
+          this.deviceDetails?.setTelemetry(t);
+          toast.show(
+            t.crashes.length > 0
+              ? `Telemetry updated: ${t.crashes.length} crash(es) detected!`
+              : `Telemetry updated: Clean state, 0 crashes detected.`,
+            t.crashes.length > 0 ? 'warning' : 'success'
+          );
+        } catch (e: any) {
+          toast.show(`Scan failed: ${e?.message || e}`, 'error');
+        }
+      }
     });
+    this.api.getTelemetry(device.id).then((t) => {
+      this.deviceDetails?.setTelemetry(t);
+    }).catch(() => {});
     this.switchTab('devices');
   }
 

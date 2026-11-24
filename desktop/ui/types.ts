@@ -107,6 +107,8 @@ export type Request =
   | { action: 'rotate'; id: string; orientation: 'portrait' | 'landscape' }
   | { action: 'set_proxy_target'; id: string; target?: string }
   | { action: 'run_matrix_test'; device_ids?: string[]; suite?: MatrixTestSuite }
+  | { action: 'analyze_crashes'; id: string }
+  | { action: 'get_telemetry'; id: string }
   | { action: 'list' }
   | { action: 'tick' }
   | { action: 'network' }
@@ -425,6 +427,27 @@ export interface MatrixRunReport {
   failed_devices: number;
   total_duration_ms: number;
   devices: MatrixDeviceResult[];
+}
+
+export interface ParsedCrash {
+  severity: 'fatal' | 'anr' | 'native' | 'warning';
+  exception_type: string;
+  process_name?: string | null;
+  message: string;
+  offending_class?: string | null;
+  offending_file?: string | null;
+  offending_line?: number | null;
+  stack_trace: string[];
+}
+
+export interface DeviceTelemetry {
+  device_id: string;
+  cpu_percent: number;
+  ram_used_mb: number;
+  ram_total_mb: number;
+  ram_percent: number;
+  fps: number;
+  crashes: ParsedCrash[];
 }
 
 export function validateDeviceSpec(spec: DeviceSpec): string | null {
