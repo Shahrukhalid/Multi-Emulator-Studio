@@ -220,6 +220,14 @@ pub enum Request {
         snapshot_id: Uuid,
         name: String,
     },
+    CheckUpdates {
+        channel: Option<crate::updater::UpdateChannel>,
+    },
+    PushFile {
+        id: Uuid,
+        path: PathBuf,
+        remote_path: Option<String>,
+    },
 }
 pub struct Controller {
     sdk: Sdk,
@@ -527,6 +535,16 @@ impl Controller {
             } => {
                 self.manager.delete_snapshot(id, snapshot_id, &name)?;
                 json!(true)
+            }
+            Request::CheckUpdates { channel } => {
+                json!(self.manager.check_for_updates(channel.unwrap_or_default()))
+            }
+            Request::PushFile {
+                id,
+                path,
+                remote_path,
+            } => {
+                json!(self.manager.push_file(id, &path, remote_path.as_deref())?)
             }
         })
     }

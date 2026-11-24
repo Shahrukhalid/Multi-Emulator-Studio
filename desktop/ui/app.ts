@@ -288,7 +288,8 @@ export class App {
             return this.api.getLogs(this.devices[0].id);
           }
           return 'No active devices to fetch logcat output.';
-        }
+        },
+        onCheckUpdates: (channel) => this.api.checkForUpdates(channel)
       }
     );
 
@@ -313,6 +314,19 @@ export class App {
 
       await this.refreshAll();
       this.startHealthPolling();
+
+      // Phase 19: Check if opened as a detached popup window
+      if (typeof window !== 'undefined' && window.location?.search) {
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('detached') === 'true') {
+          const devId = params.get('device_id');
+          const target = this.devices.find((d) => d.id === devId) || this.devices[0];
+          if (target) {
+            document.body.classList.add('detached-window-mode');
+            this.handleOpen(target);
+          }
+        }
+      }
     } catch (err) {
       console.error('App start failure:', err);
       toast.show('Failed to connect to emulator supervisor', 'error');

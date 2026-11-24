@@ -255,4 +255,14 @@ pub trait Engine {
             "Snapshot delete is unavailable".into(),
         ))
     }
+    fn push_file(
+        &mut self,
+        _: &Device,
+        _local_path: &Path,
+        _remote_path: Option<&str>,
+    ) -> Result<String> {
+        Err(crate::Error::Unavailable(
+            "File transfer to device is unavailable".into(),
+        ))
+    }
 }

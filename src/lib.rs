@@ -23,6 +23,7 @@ pub mod sensor;
 pub mod snapshot;
 pub mod storage;
 pub mod test_runner;
+pub mod updater;
 mod video;
 
 pub use error::{Error, Result};

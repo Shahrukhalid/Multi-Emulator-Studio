@@ -342,6 +342,21 @@ impl<E: Engine> Manager<E> {
         let _ = self.engine.snapshot_delete(&device, name);
         self.store.delete_snapshot(snapshot_id)
     }
+    pub fn push_file(
+        &mut self,
+        id: Uuid,
+        local_path: &Path,
+        remote_path: Option<&str>,
+    ) -> Result<String> {
+        let device = self.store.get(id)?;
+        self.engine.push_file(&device, local_path, remote_path)
+    }
+    pub fn check_for_updates(
+        &self,
+        channel: crate::updater::UpdateChannel,
+    ) -> crate::updater::UpdateCheckResult {
+        crate::updater::UpdaterEngine::check_for_updates(channel)
+    }
     pub fn list_macros(&self) -> Result<Vec<crate::macro_runner::MacroDefinition>> {
         self.store.list_macros()
     }

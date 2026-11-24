@@ -1665,6 +1665,59 @@ impl Engine for Android {
         );
         Ok(())
     }
+    fn push_file(
+        &mut self,
+        d: &Device,
+        local_path: &Path,
+        remote_path: Option<&str>,
+    ) -> Result<String> {
+        let port = self.interactive_port(d)?;
+        let file_name = local_path
+            .file_name()
+            .map(|f| f.to_string_lossy().to_string())
+            .unwrap_or_else(|| "uploaded_file".into());
+
+        if file_name.ends_with(".apk") {
+            self.install_apk(d, local_path)?;
+            return Ok(format!("Installed APK package '{file_name}'"));
+        }
+
+        let target_remote = remote_path
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| format!("/sdcard/Download/{file_name}"));
+
+        run(
+            self.adb_for(port)
+                .args(["push", &local_path.to_string_lossy(), &target_remote]),
+            None,
+            Duration::from_secs(15),
+        )?;
+
+        // If media file, trigger media scanner broadcast
+        let lower = file_name.to_lowercase();
+        if lower.ends_with(".png")
+            || lower.ends_with(".jpg")
+            || lower.ends_with(".jpeg")
+            || lower.ends_with(".bmp")
+            || lower.ends_with(".mp4")
+        {
+            let _ = run(
+                self.adb_for(port).args([
+                    "shell",
+                    "am",
+                    "broadcast",
+                    "-a",
+                    "android.intent.action.MEDIA_SCANNER_SCAN_FILE",
+                    "-d",
+                    &format!("file://{target_remote}"),
+                ]),
+                None,
+                Duration::from_secs(3),
+            );
+        }
+
+        Ok(format!("Pushed '{file_name}' to '{target_remote}'"))
+    }
 }
 impl Drop for Android {
     fn drop(&mut self) {

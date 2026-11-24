@@ -35,6 +35,11 @@ export class PhoneViewer {
   private isRecordingMacro = false;
   private recordedMacroSteps: MacroStep[] = [];
   private keyListener: ((e: KeyboardEvent) => void) | null = null;
+  private isClipboardSyncActive = false;
+  private clipboardSyncTimer: number | null = null;
+  private lastHostClip = '';
+  private lastDeviceClip = '';
+  private isPipMode = false;
 
   private visibilityChanged = () => {
     this.metrics.reset();
@@ -83,6 +88,10 @@ export class PhoneViewer {
             ${Icons.copy}
             <span class="rail-tooltip">Clipboard</span>
           </button>
+          <button class="rail-btn" data-action="clipboard_sync" title="Toggle Auto Clipboard Sync" aria-label="Auto Clipboard Sync">
+            <span style="font-size: 14px;">⇄</span>
+            <span class="rail-tooltip">Auto Clipboard Sync</span>
+          </button>
           <button class="rail-btn" data-action="record_macro" title="Record Gesture Macro" aria-label="Record Macro">
             <span style="color: #ef4444; font-weight: bold; font-size: 16px;">⏺</span>
             <span class="rail-tooltip">Record Macro</span>
@@ -114,6 +123,15 @@ export class PhoneViewer {
             <span class="rail-tooltip">Checkpoints</span>
           </button>
           <div class="rail-divider"></div>
+          <button class="rail-btn" data-action="pip" title="Picture-in-Picture Floating Mode" aria-label="PiP Mode">
+            <span style="font-size: 14px;">⧉</span>
+            <span class="rail-tooltip">Picture-in-Picture</span>
+          </button>
+          <button class="rail-btn" data-action="detach" title="Detach into External Window" aria-label="Detach Window">
+            <span style="font-size: 14px;">↗</span>
+            <span class="rail-tooltip">Detach Window</span>
+          </button>
+          <div class="rail-divider"></div>
           <button class="rail-btn" data-key="back" title="Back" aria-label="Back">◁</button>
           <button class="rail-btn" data-key="home" title="Home" aria-label="Home">○</button>
           <button class="rail-btn" data-key="recents" title="Recents" aria-label="Recents">□</button>
@@ -135,6 +153,10 @@ export class PhoneViewer {
           <div class="phone-shell">
             <div class="phone-display">
               <div class="phone-notch"></div>
+              <div class="drop-target-overlay" id="drop-target-overlay" style="display:none; position:absolute; inset:0; background:rgba(30,58,138,0.88); color:white; z-index:30; flex-direction:column; align-items:center; justify-content:center; gap:10px; font-weight:600; font-size:14px; pointer-events:none; border:2px dashed #60a5fa; border-radius:19px 19px 4px 4px;">
+                <span style="font-size:32px;">📥</span>
+                <span>Drop APK to Install or Media to Push</span>
+              </div>
               <div class="macro-rec-badge" id="macro-rec-badge" style="display:none; position:absolute; top:12px; left:12px; z-index:10; background:rgba(239,68,68,0.9); color:white; padding:4px 8px; border-radius:4px; font-size:11px; font-weight:600; align-items:center; gap:6px;"><span>🔴 REC</span><span id="macro-rec-count">0 steps</span></div>
               <p class="phone-status" role="status">Connecting to Android...</p>
               <img class="phone-frame" alt="Live Android screen" draggable="false" hidden />
@@ -223,6 +245,9 @@ export class PhoneViewer {
     this.element.querySelector('[data-action="clipboard"]')?.addEventListener('click', () => {
       void this.showClipboardDialog();
     });
+    this.element.querySelector('[data-action="clipboard_sync"]')?.addEventListener('click', () => {
+      this.toggleAutoClipboardSync();
+    });
     this.element.querySelector('[data-action="record_macro"]')?.addEventListener('click', () => {
       void this.toggleMacroRecording();
     });
@@ -243,6 +268,12 @@ export class PhoneViewer {
     });
     this.element.querySelector('[data-action="snapshot"]')?.addEventListener('click', () => {
       void this.showSnapshotDialog();
+    });
+    this.element.querySelector('[data-action="pip"]')?.addEventListener('click', () => {
+      this.togglePipMode();
+    });
+    this.element.querySelector('[data-action="detach"]')?.addEventListener('click', () => {
+      this.detachWindow();
     });
 
     // Logcat Drawer events
@@ -312,6 +343,65 @@ export class PhoneViewer {
         }
         void this.send({ action: 'navigate', id: this.device.id, key });
       });
+    });
+
+    // Phase 18: Drag-and-drop APK / media file bridge
+    const displayEl = this.element.querySelector('.phone-display') as HTMLElement;
+    const dropOverlay = this.element.querySelector('#drop-target-overlay') as HTMLElement;
+    if (displayEl) {
+      let dragDepth = 0;
+      displayEl.addEventListener('dragenter', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dragDepth++;
+        if (dropOverlay) dropOverlay.style.display = 'flex';
+        displayEl.classList.add('drag-over');
+      });
+
+      displayEl.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+        if (dropOverlay) dropOverlay.style.display = 'flex';
+        displayEl.classList.add('drag-over');
+      });
+
+      displayEl.addEventListener('dragleave', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dragDepth--;
+        if (dragDepth <= 0) {
+          dragDepth = 0;
+          if (dropOverlay) dropOverlay.style.display = 'none';
+          displayEl.classList.remove('drag-over');
+        }
+      });
+
+      displayEl.addEventListener('drop', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dragDepth = 0;
+        if (dropOverlay) dropOverlay.style.display = 'none';
+        displayEl.classList.remove('drag-over');
+
+        const files = e.dataTransfer?.files;
+        if (files && files.length > 0) {
+          void this.handleDroppedFiles(Array.from(files));
+        }
+      });
+    }
+
+    // Phase 18: Direct Host-to-Device Clipboard Paste (Ctrl+V)
+    this.element.addEventListener('paste', (e: ClipboardEvent) => {
+      const text = e.clipboardData?.getData('text');
+      if (text && !this.closed) {
+        e.preventDefault();
+        void this.api.setClipboard(this.device.id, text).then(() => {
+          toast.show('Pasted clipboard text to virtual device', 'success');
+        }).catch((err) => {
+          toast.show(`Failed to set clipboard: ${(err as { message?: string }).message || String(err)}`, 'error');
+        });
+      }
     });
   }
 
@@ -450,6 +540,7 @@ export class PhoneViewer {
   dispose(): void {
     this.closed = true;
     this.stopVideo('');
+    this.stopClipboardSync();
     if (this.keyListener) {
       window.removeEventListener('keydown', this.keyListener);
       this.keyListener = null;
@@ -1100,6 +1191,110 @@ export class PhoneViewer {
       }
     } catch (err: unknown) {
       toast.show(`Snapshot operation error: ${(err as { message?: string }).message || String(err)}`, 'error');
+    }
+  }
+
+  private async handleDroppedFiles(files: File[]): Promise<void> {
+    for (const file of files) {
+      const fileName = file.name;
+      const filePath = (file as unknown as { path?: string }).path || fileName;
+      const lower = fileName.toLowerCase();
+
+      if (lower.endsWith('.apk')) {
+        toast.show(`Installing dropped APK: ${fileName}…`, 'info');
+        try {
+          await this.api.installApk(this.device.id, filePath);
+          toast.show(`Installed APK "${fileName}" successfully!`, 'success');
+        } catch (err: unknown) {
+          toast.show(`APK installation failed: ${(err as { message?: string }).message || String(err)}`, 'error');
+        }
+      } else {
+        toast.show(`Transferring file "${fileName}" to device…`, 'info');
+        try {
+          await this.api.pushFile(this.device.id, filePath);
+          const isMedia = /\.(png|jpe?g|gif|webp|bmp|mp4|mkv|mov|mp3|wav|ogg)$/i.test(lower);
+          if (isMedia) {
+            toast.show(`Pushed "${fileName}" and indexed into MediaStore!`, 'success');
+          } else {
+            toast.show(`Pushed "${fileName}" to /sdcard/Download/`, 'success');
+          }
+        } catch (err: unknown) {
+          toast.show(`File transfer failed: ${(err as { message?: string }).message || String(err)}`, 'error');
+        }
+      }
+    }
+  }
+
+  private toggleAutoClipboardSync(): void {
+    this.isClipboardSyncActive = !this.isClipboardSyncActive;
+    const btn = this.element.querySelector('[data-action="clipboard_sync"]');
+    if (this.isClipboardSyncActive) {
+      btn?.classList.add('active');
+      toast.show('Bidirectional Clipboard Sync enabled.', 'info');
+      this.startClipboardSync();
+    } else {
+      btn?.classList.remove('active');
+      toast.show('Bidirectional Clipboard Sync disabled.', 'info');
+      this.stopClipboardSync();
+    }
+  }
+
+  private startClipboardSync(): void {
+    if (this.clipboardSyncTimer) clearInterval(this.clipboardSyncTimer);
+    this.clipboardSyncTimer = window.setInterval(async () => {
+      if (!this.isClipboardSyncActive || this.closed || !this.visible) return;
+      try {
+        const devClip = await this.api.getClipboard(this.device.id);
+        if (devClip && devClip !== this.lastDeviceClip && devClip !== this.lastHostClip) {
+          this.lastDeviceClip = devClip;
+          this.lastHostClip = devClip;
+          if (navigator.clipboard?.writeText) {
+            await navigator.clipboard.writeText(devClip);
+            toast.show('Device clipboard copied to host clipboard', 'info');
+          }
+        }
+      } catch {
+        // Silently continue background poll
+      }
+    }, 3000);
+  }
+
+  private stopClipboardSync(): void {
+    if (this.clipboardSyncTimer) {
+      clearInterval(this.clipboardSyncTimer);
+      this.clipboardSyncTimer = null;
+    }
+  }
+
+  private togglePipMode(): void {
+    this.isPipMode = !this.isPipMode;
+    const btn = this.element.querySelector('[data-action="pip"]');
+    if (this.isPipMode) {
+      this.element.classList.add('pip-mode');
+      btn?.classList.add('active');
+      toast.show('Picture-in-Picture mode enabled (floating mini viewer).', 'info');
+    } else {
+      this.element.classList.remove('pip-mode');
+      btn?.classList.remove('active');
+      toast.show('Restored to standard workstation view.', 'info');
+    }
+  }
+
+  private detachWindow(): void {
+    const w = 440;
+    const h = 880;
+    const left = Math.max(0, window.screenX + (window.outerWidth - w) / 2);
+    const top = Math.max(0, window.screenY + (window.outerHeight - h) / 2);
+    const url = `${window.location.origin}${window.location.pathname}?detached=true&device_id=${encodeURIComponent(this.device.id)}`;
+    const popout = window.open(
+      url,
+      `mes_popout_${this.device.id}`,
+      `width=${w},height=${h},left=${left},top=${top},resizable=yes,scrollbars=no,status=no,toolbar=no,menubar=no`
+    );
+    if (popout) {
+      toast.show(`Detached ${this.device.spec.name} into floating window.`, 'success');
+    } else {
+      toast.show('Pop-up window was blocked by the browser. Please allow popups.', 'warning');
     }
   }
 
