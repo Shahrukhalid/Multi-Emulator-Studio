@@ -1,9 +1,17 @@
-import { MatrixTestSuite, MatrixDeviceSnapshot, MatrixRunReport } from '../types.js';
+import {
+  MatrixTestSuite,
+  MatrixDeviceSnapshot,
+  MatrixRunReport,
+  BroadcastInstallReport,
+  SynchronizedScreenshotsReport
+} from '../types.js';
 import { Icons } from '../icons.js';
 
 export interface TestMatrixCallbacks {
   onRunMatrix: () => void;
   onSelectStep: (suiteId: string, stepId: string) => void;
+  onBroadcastApk?: () => void;
+  onCaptureSynchronized?: () => void;
 }
 
 export class TestMatrixComponent {
@@ -15,6 +23,7 @@ export class TestMatrixComponent {
   private activeFilter: 'all' | 'passed' | 'failed' = 'all';
   private zoomLevel: 'small' | 'medium' | 'large' = 'medium';
   private isRunning = false;
+  private broadcastReport: BroadcastInstallReport | null = null;
 
   constructor(private callbacks: TestMatrixCallbacks) {
     this.element = document.createElement('div');
@@ -107,12 +116,32 @@ export class TestMatrixComponent {
             <button class="zoom-btn ${this.zoomLevel === 'large' ? 'active' : ''}" data-zoom="large">L</button>
           </div>
 
+          <button class="filter-pill" id="btn-broadcast-apk" title="Install an APK across all devices simultaneously" style="display: inline-flex; align-items: center; gap: 5px; height: 32px; padding: 0 10px; cursor: pointer;">
+            ${Icons.download}
+            <span>Broadcast APK</span>
+          </button>
+          <button class="filter-pill" id="btn-sync-screenshots" title="Capture simultaneous screenshots across all active devices to compare responsive layouts" style="display: inline-flex; align-items: center; gap: 5px; height: 32px; padding: 0 10px; cursor: pointer;">
+            ${Icons.camera}
+            <span>Capture All</span>
+          </button>
+
           <button class="btn-create-primary" id="btn-run-matrix-tests" ${this.isRunning ? 'disabled style="opacity:0.7;"' : ''}>
             ${Icons.play}
             <span>${this.isRunning ? 'Executing Tests (Free)...' : 'Run Matrix Test (Free)'}</span>
           </button>
         </div>
       </div>
+
+      ${this.broadcastReport ? `
+      <div class="matrix-broadcast-banner" style="display: flex; align-items: center; justify-content: space-between; padding: 8px 16px; margin: 8px 16px 0; background: var(--color-primary-subtle); border: 1px solid var(--border-subtle); border-radius: 8px; font-size: 12px;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span>📦</span>
+          <strong>Fleet Broadcast:</strong>
+          <span>Installed <code>${this.broadcastReport.package_name}</code> on ${this.broadcastReport.successful_devices}/${this.broadcastReport.total_devices} devices in ${this.broadcastReport.total_duration_ms}ms</span>
+        </div>
+        <button id="btn-dismiss-broadcast" class="filter-pill" style="padding: 2px 8px; font-size: 11px;">✕</button>
+      </div>
+      ` : ''}
 
       <!-- Matrix Workspace Layout -->
       <div class="matrix-layout">
@@ -246,10 +275,44 @@ export class TestMatrixComponent {
         this.callbacks.onRunMatrix();
       }
     });
+
+    // Broadcast APK button
+    this.element.querySelector('#btn-broadcast-apk')?.addEventListener('click', () => {
+      this.callbacks.onBroadcastApk?.();
+    });
+
+    // Synchronized screenshots button
+    this.element.querySelector('#btn-sync-screenshots')?.addEventListener('click', () => {
+      this.callbacks.onCaptureSynchronized?.();
+    });
+
+    // Dismiss broadcast banner button
+    this.element.querySelector('#btn-dismiss-broadcast')?.addEventListener('click', () => {
+      this.broadcastReport = null;
+      this.render();
+    });
   }
 
   public setRunning(running: boolean): void {
     this.isRunning = running;
+    this.render();
+  }
+
+  public applyBroadcastReport(report: BroadcastInstallReport): void {
+    this.broadcastReport = report;
+    this.render();
+  }
+
+  public applySynchronizedScreenshots(report: SynchronizedScreenshotsReport): void {
+    if (!report.frames.length) return;
+    this.devices = report.frames.map((frame) => ({
+      deviceId: frame.device_id,
+      deviceName: frame.device_name,
+      osVersion: frame.hardware_profile,
+      formFactor: (frame.width > 1600 || frame.height > 2000 ? 'tablet' : 'phone') as 'phone' | 'tablet' | 'foldable',
+      status: frame.state === 'ready' ? 'passed' : 'failed',
+      screenshot: frame.png_base64,
+    }));
     this.render();
   }
 

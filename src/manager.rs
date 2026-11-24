@@ -296,6 +296,46 @@ impl<E: Engine> Manager<E> {
             crashes,
         })
     }
+    pub fn broadcast_install(
+        &mut self,
+        device_ids: Option<Vec<Uuid>>,
+        file_path: &Path,
+    ) -> Result<crate::fleet::BroadcastInstallReport> {
+        let target_devices = match device_ids {
+            Some(ids) if !ids.is_empty() => {
+                let mut devs = Vec::new();
+                for id in ids {
+                    devs.push(self.store.get(id)?);
+                }
+                devs
+            }
+            _ => self.store.list()?,
+        };
+        Ok(crate::fleet::FleetEngine::broadcast_install(
+            &mut self.engine,
+            &target_devices,
+            file_path,
+        ))
+    }
+    pub fn synchronized_screenshots(
+        &mut self,
+        device_ids: Option<Vec<Uuid>>,
+    ) -> Result<crate::fleet::SynchronizedScreenshotsReport> {
+        let target_devices = match device_ids {
+            Some(ids) if !ids.is_empty() => {
+                let mut devs = Vec::new();
+                for id in ids {
+                    devs.push(self.store.get(id)?);
+                }
+                devs
+            }
+            _ => self.store.list()?,
+        };
+        Ok(crate::fleet::FleetEngine::capture_synchronized_screenshots(
+            &mut self.engine,
+            &target_devices,
+        ))
+    }
 }
 
 #[cfg(test)]

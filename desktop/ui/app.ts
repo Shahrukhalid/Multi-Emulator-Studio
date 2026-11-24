@@ -144,6 +144,32 @@ export class App {
       },
       onSelectStep: (suite, step) => {
         toast.show(`Selected test step: ${suite} > ${step}`, 'info');
+      },
+      onBroadcastApk: async () => {
+        try {
+          const apkPath = await this.api.pickApk();
+          if (!apkPath) return;
+          const fileName = apkPath.split(/[/\\]/).pop() || 'app.apk';
+          toast.show(`Broadcasting ${fileName} to active fleet...`, 'info');
+          const report = await this.api.broadcastInstall(undefined, apkPath);
+          this.testMatrix.applyBroadcastReport(report);
+          toast.show(
+            `Broadcast install: ${report.successful_devices}/${report.total_devices} devices updated in ${report.total_duration_ms}ms`,
+            report.failed_devices === 0 ? 'success' : 'warning'
+          );
+        } catch (e: any) {
+          toast.show(`Broadcast install failed: ${e?.message || e}`, 'error');
+        }
+      },
+      onCaptureSynchronized: async () => {
+        try {
+          toast.show('Capturing synchronized layout comparison frames...', 'info');
+          const report = await this.api.synchronizedScreenshots();
+          this.testMatrix.applySynchronizedScreenshots(report);
+          toast.show(`Synchronized layout comparison updated for ${report.frames.length} devices`, 'success');
+        } catch (e: any) {
+          toast.show(`Capture failed: ${e?.message || e}`, 'error');
+        }
       }
     });
 

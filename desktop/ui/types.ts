@@ -113,6 +113,8 @@ export type Request =
   | { action: 'ios_devices' }
   | { action: 'ios_boot'; udid: string }
   | { action: 'ios_shutdown'; udid: string }
+  | { action: 'broadcast_install'; device_ids?: string[]; path: string }
+  | { action: 'synchronized_screenshots'; device_ids?: string[] }
   | { action: 'list' }
   | { action: 'tick' }
   | { action: 'network' }
@@ -468,6 +470,38 @@ export interface IosRuntime {
   version: string;
   name: string;
   is_available: boolean;
+}
+
+export interface BroadcastInstallItem {
+  device_id: string;
+  device_name: string;
+  success: boolean;
+  message: string;
+  elapsed_ms: number;
+}
+
+export interface BroadcastInstallReport {
+  package_name: string;
+  total_devices: number;
+  successful_devices: number;
+  failed_devices: number;
+  total_duration_ms: number;
+  results: BroadcastInstallItem[];
+}
+
+export interface SynchronizedFrame {
+  device_id: string;
+  device_name: string;
+  hardware_profile: string;
+  width: number;
+  height: number;
+  png_base64: string;
+  state: string;
+}
+
+export interface SynchronizedScreenshotsReport {
+  timestamp_ms: number;
+  frames: SynchronizedFrame[];
 }
 
 export function validateDeviceSpec(spec: DeviceSpec): string | null {

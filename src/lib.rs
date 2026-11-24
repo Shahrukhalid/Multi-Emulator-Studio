@@ -3,6 +3,7 @@ pub mod budget;
 pub mod control;
 pub mod diagnostics;
 pub mod error;
+pub mod fleet;
 pub mod host;
 pub mod ios;
 pub mod managed_sdk;
