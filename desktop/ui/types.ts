@@ -118,6 +118,16 @@ export type Request =
   | { action: 'set_network_profile'; id: string; profile: string }
   | { action: 'get_network_profiles' }
   | { action: 'generate_report_html'; matrix: MatrixRunReport; crashes?: ParsedCrash[]; fleet?: BroadcastInstallReport }
+  | { action: 'preflight_report' }
+  | { action: 'input_key'; id: string; keycode: number }
+  | { action: 'input_text'; id: string; text: string }
+  | { action: 'set_clipboard'; id: string; text: string }
+  | { action: 'get_clipboard'; id: string }
+  | { action: 'list_macros' }
+  | { action: 'save_macro'; macro_def: MacroDefinition }
+  | { action: 'delete_macro'; id: string }
+  | { action: 'run_macro'; macro_id: string; device_id: string }
+  | { action: 'run_macro_fleet'; macro_id: string; device_ids?: string[] }
   | { action: 'list' }
   | { action: 'tick' }
   | { action: 'network' }
@@ -516,6 +526,63 @@ export interface NetworkProfile {
   upload_kbps: number;
   latency_ms: number;
   description: string;
+}
+
+export type HealthStatus = 'pass' | 'warn' | 'fail';
+
+export interface HealthCheck {
+  id: string;
+  category: string;
+  title: string;
+  status: HealthStatus;
+  summary: string;
+  details?: string;
+  remediation?: string;
+}
+
+export interface PreflightReport {
+  overall: HealthStatus;
+  host_os: string;
+  host_arch: string;
+  cpu_cores: number;
+  ram_mb?: number;
+  disk_mb?: number;
+  checks: HealthCheck[];
+}
+
+export type MacroAction =
+  | { type: 'tap'; x: number; y: number }
+  | { type: 'swipe'; x: number; y: number; end_x: number; end_y: number; duration_ms?: number }
+  | { type: 'text'; text: string }
+  | { type: 'key'; keycode: number; name?: string }
+  | { type: 'navigation'; key: NavigationKey }
+  | { type: 'sleep'; duration_ms: number }
+  | { type: 'launch_app'; package: string }
+  | { type: 'screenshot'; label: string };
+
+export type MacroStep = {
+  step_number: number;
+  delay_after_ms: number;
+} & MacroAction;
+
+export interface MacroDefinition {
+  id: string;
+  name: string;
+  description: string;
+  created_at: string;
+  steps: MacroStep[];
+}
+
+export interface MacroExecutionResult {
+  macro_id: string;
+  macro_name: string;
+  device_id: string;
+  device_name: string;
+  status: string;
+  steps_completed: number;
+  total_steps: number;
+  duration_ms: number;
+  failure_reason?: string;
 }
 
 export function validateDeviceSpec(spec: DeviceSpec): string | null {

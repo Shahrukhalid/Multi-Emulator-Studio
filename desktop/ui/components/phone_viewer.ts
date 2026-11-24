@@ -1,8 +1,9 @@
 import { IApiClient } from '../api.js';
-import { Device, GoogleApps, NavigationKey, TouchInput } from '../types.js';
+import { Device, GoogleApps, NavigationKey, TouchInput, MacroStep, MacroDefinition } from '../types.js';
 import { FrameScheduler, FrameMetrics, nextCaptureDelay } from '../frame_scheduler.js';
 import { LiveVideo } from '../live_video.js';
 import { Icons } from '../icons.js';
+import { toast } from '../toast.js';
 
 export class PhoneViewer {
   private static scheduler = new FrameScheduler(2);
@@ -30,6 +31,10 @@ export class PhoneViewer {
   private rawLogcat = '';
   private logcatLevel = 'all';
   private logcatSearch = '';
+  private isHostKeyboardActive = false;
+  private isRecordingMacro = false;
+  private recordedMacroSteps: MacroStep[] = [];
+  private keyListener: ((e: KeyboardEvent) => void) | null = null;
 
   private visibilityChanged = () => {
     this.metrics.reset();
@@ -70,6 +75,23 @@ export class PhoneViewer {
             <span class="rail-tooltip">Install APK</span>
           </button>
           <div class="rail-divider"></div>
+          <button class="rail-btn" data-action="keyboard" title="Toggle Host Typing (Forward Keystrokes)" aria-label="Host Typing">
+            <span style="font-size: 14px;">⌨</span>
+            <span class="rail-tooltip">Host Typing</span>
+          </button>
+          <button class="rail-btn" data-action="clipboard" title="Device & Host Clipboard" aria-label="Clipboard">
+            ${Icons.copy}
+            <span class="rail-tooltip">Clipboard</span>
+          </button>
+          <button class="rail-btn" data-action="record_macro" title="Record Gesture Macro" aria-label="Record Macro">
+            <span style="color: #ef4444; font-weight: bold; font-size: 16px;">⏺</span>
+            <span class="rail-tooltip">Record Macro</span>
+          </button>
+          <button class="rail-btn" data-action="play_macro" title="Replay Gesture Macro" aria-label="Play Macro">
+            <span style="color: #3b82f6; font-size: 14px;">▶</span>
+            <span class="rail-tooltip">Play Macro</span>
+          </button>
+          <div class="rail-divider"></div>
           <button class="rail-btn" data-key="back" title="Back" aria-label="Back">◁</button>
           <button class="rail-btn" data-key="home" title="Home" aria-label="Home">○</button>
           <button class="rail-btn" data-key="recents" title="Recents" aria-label="Recents">□</button>
@@ -91,6 +113,7 @@ export class PhoneViewer {
           <div class="phone-shell">
             <div class="phone-display">
               <div class="phone-notch"></div>
+              <div class="macro-rec-badge" id="macro-rec-badge" style="display:none; position:absolute; top:12px; left:12px; z-index:10; background:rgba(239,68,68,0.9); color:white; padding:4px 8px; border-radius:4px; font-size:11px; font-weight:600; align-items:center; gap:6px;"><span>🔴 REC</span><span id="macro-rec-count">0 steps</span></div>
               <p class="phone-status" role="status">Connecting to Android...</p>
               <img class="phone-frame" alt="Live Android screen" draggable="false" hidden />
               <canvas class="phone-video-frame" aria-label="Experimental live video" hidden></canvas>
@@ -172,6 +195,18 @@ export class PhoneViewer {
     this.element.querySelector('[data-action="install_apk"]')?.addEventListener('click', () => {
       this.onInstallApk?.(this.device);
     });
+    this.element.querySelector('[data-action="keyboard"]')?.addEventListener('click', () => {
+      this.toggleHostKeyboard();
+    });
+    this.element.querySelector('[data-action="clipboard"]')?.addEventListener('click', () => {
+      void this.showClipboardDialog();
+    });
+    this.element.querySelector('[data-action="record_macro"]')?.addEventListener('click', () => {
+      void this.toggleMacroRecording();
+    });
+    this.element.querySelector('[data-action="play_macro"]')?.addEventListener('click', () => {
+      void this.showPlayMacroDialog();
+    });
 
     // Logcat Drawer events
     this.element.querySelector('#btn-logcat-close')?.addEventListener('click', () => {
@@ -211,6 +246,16 @@ export class PhoneViewer {
           Math.hypot(end.x - start.x, end.y - start.y) < 15
             ? { kind: 'tap', ...end }
             : { kind: 'swipe', x: start.x, y: start.y, end_x: end.x, end_y: end.y };
+        if (this.isRecordingMacro) {
+          this.recordedMacroSteps.push({
+            step_number: this.recordedMacroSteps.length + 1,
+            delay_after_ms: 300,
+            ...(input.kind === 'tap'
+              ? { type: 'tap', x: input.x, y: input.y }
+              : { type: 'swipe', x: input.x, y: input.y, end_x: input.end_x, end_y: input.end_y, duration_ms: 250 })
+          });
+          this.updateMacroRecCount();
+        }
         void this.send({ action: 'touch', id: this.device.id, input });
       });
     }
@@ -218,7 +263,17 @@ export class PhoneViewer {
     // Navigation buttons
     this.element.querySelectorAll<HTMLButtonElement>('[data-key]').forEach((button) => {
       button.addEventListener('click', () => {
-        void this.send({ action: 'navigate', id: this.device.id, key: button.dataset.key as NavigationKey });
+        const key = button.dataset.key as NavigationKey;
+        if (this.isRecordingMacro) {
+          this.recordedMacroSteps.push({
+            step_number: this.recordedMacroSteps.length + 1,
+            delay_after_ms: 300,
+            type: 'navigation',
+            key
+          });
+          this.updateMacroRecCount();
+        }
+        void this.send({ action: 'navigate', id: this.device.id, key });
       });
     });
   }
@@ -358,6 +413,10 @@ export class PhoneViewer {
   dispose(): void {
     this.closed = true;
     this.stopVideo('');
+    if (this.keyListener) {
+      window.removeEventListener('keydown', this.keyListener);
+      this.keyListener = null;
+    }
     if (this.logcatTimer) {
       clearInterval(this.logcatTimer);
       this.logcatTimer = null;
@@ -584,6 +643,178 @@ export class PhoneViewer {
         void this.checkApps();
       }
       this.schedule(nextCaptureDelay(performance.now() - started, this.failures));
+    }
+  }
+
+  private updateMacroRecCount(): void {
+    const countEl = this.element.querySelector('#macro-rec-count');
+    if (countEl) countEl.textContent = `${this.recordedMacroSteps.length} steps`;
+  }
+
+  private toggleHostKeyboard(): void {
+    this.isHostKeyboardActive = !this.isHostKeyboardActive;
+    const btn = this.element.querySelector('[data-action="keyboard"]');
+    if (btn) {
+      if (this.isHostKeyboardActive) {
+        btn.classList.add('active');
+        toast.show('Host Typing enabled: Keystrokes forward directly to device.', 'info');
+      } else {
+        btn.classList.remove('active');
+        toast.show('Host Typing disabled.', 'info');
+      }
+    }
+
+    if (this.isHostKeyboardActive) {
+      if (!this.keyListener) {
+        this.keyListener = (e: KeyboardEvent) => {
+          if (!this.isHostKeyboardActive || this.closed) return;
+          const tag = (document.activeElement?.tagName || '').toLowerCase();
+          if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+
+          e.preventDefault();
+          let keycode: number | null = null;
+          if (e.key === 'Enter') keycode = 66;
+          else if (e.key === 'Backspace') keycode = 67;
+          else if (e.key === 'Tab') keycode = 61;
+          else if (e.key === 'Escape') keycode = 111;
+          else if (e.key === ' ') keycode = 62;
+          else if (e.key === 'ArrowUp') keycode = 19;
+          else if (e.key === 'ArrowDown') keycode = 20;
+          else if (e.key === 'ArrowLeft') keycode = 21;
+          else if (e.key === 'ArrowRight') keycode = 22;
+
+          if (keycode !== null) {
+            if (this.isRecordingMacro) {
+              this.recordedMacroSteps.push({
+                step_number: this.recordedMacroSteps.length + 1,
+                delay_after_ms: 200,
+                type: 'key',
+                keycode
+              });
+              this.updateMacroRecCount();
+            }
+            void this.api.inputKey(this.device.id, keycode);
+          } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+            if (this.isRecordingMacro) {
+              this.recordedMacroSteps.push({
+                step_number: this.recordedMacroSteps.length + 1,
+                delay_after_ms: 200,
+                type: 'text',
+                text: e.key
+              });
+              this.updateMacroRecCount();
+            }
+            void this.api.inputText(this.device.id, e.key);
+          }
+        };
+        window.addEventListener('keydown', this.keyListener);
+      }
+    } else {
+      if (this.keyListener) {
+        window.removeEventListener('keydown', this.keyListener);
+        this.keyListener = null;
+      }
+    }
+  }
+
+  private async showClipboardDialog(): Promise<void> {
+    let currentClip = '';
+    try {
+      currentClip = await this.api.getClipboard(this.device.id);
+    } catch {
+      currentClip = '';
+    }
+
+    const text = window.prompt(
+      'Synchronize Clipboard with Virtual Device:\n(Type text to push to device, or leave as-is to copy to host)',
+      currentClip || ''
+    );
+    if (text !== null && text !== currentClip) {
+      try {
+        await this.api.setClipboard(this.device.id, text);
+        toast.show('Pushed text to device clipboard', 'success');
+      } catch (err: unknown) {
+        toast.show(`Failed to set clipboard: ${(err as { message?: string }).message || String(err)}`, 'error');
+      }
+    } else if (text !== null && text === currentClip && currentClip) {
+      navigator.clipboard.writeText(currentClip);
+      toast.show('Device clipboard copied to host clipboard!', 'success');
+    }
+  }
+
+  private async toggleMacroRecording(): Promise<void> {
+    const badge = this.element.querySelector('#macro-rec-badge') as HTMLElement;
+    const btn = this.element.querySelector('[data-action="record_macro"]');
+
+    if (!this.isRecordingMacro) {
+      this.isRecordingMacro = true;
+      this.recordedMacroSteps = [];
+      this.updateMacroRecCount();
+      if (badge) badge.style.display = 'flex';
+      btn?.classList.add('active');
+      toast.show('Macro recording started! Click, drag, or type on the screen to record steps.', 'info');
+    } else {
+      this.isRecordingMacro = false;
+      if (badge) badge.style.display = 'none';
+      btn?.classList.remove('active');
+
+      if (this.recordedMacroSteps.length === 0) {
+        toast.show('Recording cancelled (0 steps captured).', 'warning');
+        return;
+      }
+
+      const name = window.prompt(
+        `Recorded ${this.recordedMacroSteps.length} gesture/input steps!\nEnter a name for this Macro:`,
+        `Macro ${new Date().toLocaleTimeString()}`
+      );
+      if (!name || !name.trim()) return;
+
+      const newMacro: MacroDefinition = {
+        id: crypto.randomUUID(),
+        name: name.trim(),
+        description: `Recorded on ${this.device.spec.name} (${this.recordedMacroSteps.length} steps)`,
+        created_at: new Date().toISOString(),
+        steps: this.recordedMacroSteps
+      };
+
+      try {
+        await this.api.saveMacro(newMacro);
+        toast.show(`Macro "${newMacro.name}" saved successfully!`, 'success');
+      } catch (err: unknown) {
+        toast.show(`Failed to save macro: ${(err as { message?: string }).message || String(err)}`, 'error');
+      }
+    }
+  }
+
+  private async showPlayMacroDialog(): Promise<void> {
+    try {
+      const macros = await this.api.listMacros();
+      if (macros.length === 0) {
+        toast.show('No macros found.', 'warning');
+        return;
+      }
+
+      const options = macros.map((m, i) => `${i + 1}. ${m.name} (${m.steps.length} steps)`).join('\n');
+      const choice = window.prompt(`Select Macro to Replay on ${this.device.spec.name}:\n\n${options}\n\nEnter number (1-${macros.length}):`, '1');
+      if (!choice) return;
+
+      const idx = parseInt(choice.trim(), 10) - 1;
+      if (isNaN(idx) || idx < 0 || idx >= macros.length) {
+        toast.show('Invalid macro selection.', 'error');
+        return;
+      }
+
+      const selected = macros[idx];
+      toast.show(`Replaying "${selected.name}" on ${this.device.spec.name}...`, 'info');
+      const result = await this.api.runMacro(selected.id, this.device.id);
+
+      if (result.status === 'passed') {
+        toast.show(`Macro "${result.macro_name}" finished: ${result.steps_completed}/${result.total_steps} steps passed in ${result.duration_ms}ms!`, 'success');
+      } else {
+        toast.show(`Macro execution stopped: ${result.failure_reason || 'Unknown failure'}`, 'error');
+      }
+    } catch (err: unknown) {
+      toast.show(`Macro replay failed: ${(err as { message?: string }).message || String(err)}`, 'error');
     }
   }
 

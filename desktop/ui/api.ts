@@ -14,7 +14,10 @@ import {
   IosSimulatorDevice,
   BroadcastInstallReport,
   SynchronizedScreenshotsReport,
-  NetworkProfile
+  NetworkProfile,
+  PreflightReport,
+  MacroDefinition,
+  MacroExecutionResult
 } from './types.js';
 
 declare const window: Window & {
@@ -79,6 +82,16 @@ export interface IApiClient {
   setNetworkProfile(id: string, profile: string): Promise<boolean>;
   getNetworkProfiles(): Promise<NetworkProfile[]>;
   generateReportHtml(matrix: MatrixRunReport, crashes?: ParsedCrash[], fleet?: BroadcastInstallReport): Promise<string>;
+  getPreflightReport(): Promise<PreflightReport>;
+  inputKey(id: string, keycode: number): Promise<boolean>;
+  inputText(id: string, text: string): Promise<boolean>;
+  setClipboard(id: string, text: string): Promise<boolean>;
+  getClipboard(id: string): Promise<string>;
+  listMacros(): Promise<MacroDefinition[]>;
+  saveMacro(macroDef: MacroDefinition): Promise<boolean>;
+  deleteMacro(id: string): Promise<boolean>;
+  runMacro(macroId: string, deviceId: string): Promise<MacroExecutionResult>;
+  runMacroFleet(macroId: string, deviceIds?: string[]): Promise<MacroExecutionResult[]>;
 }
 
 class TauriApiClient implements IApiClient {
@@ -258,6 +271,46 @@ class TauriApiClient implements IApiClient {
   generateReportHtml(matrix: MatrixRunReport, crashes?: ParsedCrash[], fleet?: BroadcastInstallReport): Promise<string> {
     return this.dispatch<string>({ action: 'generate_report_html', matrix, crashes, fleet });
   }
+
+  getPreflightReport(): Promise<PreflightReport> {
+    return this.dispatch<PreflightReport>({ action: 'preflight_report' });
+  }
+
+  inputKey(id: string, keycode: number): Promise<boolean> {
+    return this.dispatch<boolean>({ action: 'input_key', id, keycode });
+  }
+
+  inputText(id: string, text: string): Promise<boolean> {
+    return this.dispatch<boolean>({ action: 'input_text', id, text });
+  }
+
+  setClipboard(id: string, text: string): Promise<boolean> {
+    return this.dispatch<boolean>({ action: 'set_clipboard', id, text });
+  }
+
+  getClipboard(id: string): Promise<string> {
+    return this.dispatch<string>({ action: 'get_clipboard', id });
+  }
+
+  listMacros(): Promise<MacroDefinition[]> {
+    return this.dispatch<MacroDefinition[]>({ action: 'list_macros' });
+  }
+
+  saveMacro(macroDef: MacroDefinition): Promise<boolean> {
+    return this.dispatch<boolean>({ action: 'save_macro', macro_def: macroDef });
+  }
+
+  deleteMacro(id: string): Promise<boolean> {
+    return this.dispatch<boolean>({ action: 'delete_macro', id });
+  }
+
+  runMacro(macroId: string, deviceId: string): Promise<MacroExecutionResult> {
+    return this.dispatch<MacroExecutionResult>({ action: 'run_macro', macro_id: macroId, device_id: deviceId });
+  }
+
+  runMacroFleet(macroId: string, deviceIds?: string[]): Promise<MacroExecutionResult[]> {
+    return this.dispatch<MacroExecutionResult[]>({ action: 'run_macro_fleet', macro_id: macroId, device_ids: deviceIds });
+  }
 }
 
 /**
@@ -361,6 +414,23 @@ class BrowserPreviewClient implements IApiClient {
       case 'ios_boot':
       case 'ios_shutdown':
         return true as unknown as T;
+      case 'preflight_report':
+        return (await this.getPreflightReport()) as unknown as T;
+      case 'input_key':
+      case 'input_text':
+      case 'set_clipboard':
+        return true as unknown as T;
+      case 'get_clipboard':
+        return 'Multi-Emulator Studio Preview Clipboard' as unknown as T;
+      case 'list_macros':
+        return (await this.listMacros()) as unknown as T;
+      case 'save_macro':
+      case 'delete_macro':
+        return true as unknown as T;
+      case 'run_macro':
+        return (await this.runMacro(request.macro_id, request.device_id)) as unknown as T;
+      case 'run_macro_fleet':
+        return (await this.runMacroFleet(request.macro_id, request.device_ids)) as unknown as T;
       case 'get_logcat':
         return (await this.getLogcat(request.id, request.lines)) as unknown as T;
       case 'start':
@@ -654,6 +724,179 @@ class BrowserPreviewClient implements IApiClient {
 
   async generateReportHtml(matrix: MatrixRunReport, _crashes?: ParsedCrash[], _fleet?: BroadcastInstallReport): Promise<string> {
     return `<!DOCTYPE html><html><body><h1>Multi-Emulator Studio Report</h1><p>Suite: ${matrix.suite_name}</p></body></html>`;
+  }
+
+  async getPreflightReport(): Promise<PreflightReport> {
+    return {
+      overall: 'pass',
+      host_os: 'windows',
+      host_arch: 'x86_64',
+      cpu_cores: 8,
+      ram_mb: 16384,
+      disk_mb: 120000,
+      checks: [
+        {
+          id: 'hypervisor_windows',
+          category: 'virtualization',
+          title: 'Hardware Virtualization (Windows Hypervisor Platform)',
+          status: 'pass',
+          summary: 'Windows Hypervisor Platform (WHPX) acceleration is active.',
+        },
+        {
+          id: 'emulator_accel',
+          category: 'virtualization',
+          title: 'Android Emulator Acceleration',
+          status: 'pass',
+          summary: 'Hardware acceleration verified and operational.',
+        },
+        {
+          id: 'sdk_root',
+          category: 'sdk',
+          title: 'Android SDK Root Directory',
+          status: 'pass',
+          summary: 'SDK root directory detected and verified.',
+        },
+        {
+          id: 'adb_tool',
+          category: 'sdk',
+          title: 'Android Debug Bridge (adb)',
+          status: 'pass',
+          summary: 'Found adb tool: Android Debug Bridge version 1.0.41',
+        },
+        {
+          id: 'emulator_tool',
+          category: 'sdk',
+          title: 'Android Emulator Binary',
+          status: 'pass',
+          summary: 'Found emulator binary: Android Emulator version 34.2.14',
+        },
+        {
+          id: 'system_images',
+          category: 'sdk',
+          title: 'System Images',
+          status: 'pass',
+          summary: '1 Android system image(s) installed and ready.',
+        },
+        {
+          id: 'system_ram',
+          category: 'resources',
+          title: 'Physical Memory (RAM)',
+          status: 'pass',
+          summary: '16.0 GB physical RAM detected (meets recommendation).',
+        },
+        {
+          id: 'system_disk',
+          category: 'resources',
+          title: 'Free Disk Space',
+          status: 'pass',
+          summary: '117.2 GB free storage available.',
+        },
+        {
+          id: 'cpu_cores',
+          category: 'resources',
+          title: 'CPU Logical Cores',
+          status: 'pass',
+          summary: '8 logical CPU cores detected.',
+        },
+        {
+          id: 'ios_toolchain',
+          category: 'apple_ios',
+          title: 'Apple iOS Simulator Compatibility',
+          status: 'pass',
+          summary: 'Non-macOS host: iOS Simulator runs in cross-platform preview/design mode.',
+        }
+      ]
+    };
+  }
+
+  async inputKey(_id: string, _keycode: number): Promise<boolean> {
+    return true;
+  }
+
+  async inputText(_id: string, _text: string): Promise<boolean> {
+    return true;
+  }
+
+  async setClipboard(_id: string, _text: string): Promise<boolean> {
+    return true;
+  }
+
+  async getClipboard(_id: string): Promise<string> {
+    return 'Multi-Emulator Studio Preview Clipboard';
+  }
+
+  async listMacros(): Promise<MacroDefinition[]> {
+    return [
+      {
+        id: '00000000-0000-0000-0000-000000000001',
+        name: 'App Cold Launch Smoke',
+        description: 'Launches settings app, waits for render, captures screenshot, and returns home.',
+        created_at: '2026-11-24T00:00:00Z',
+        steps: [
+          { step_number: 1, type: 'launch_app', package: 'com.android.settings', delay_after_ms: 1200 },
+          { step_number: 2, type: 'screenshot', label: 'App Loaded', delay_after_ms: 300 },
+          { step_number: 3, type: 'navigation', key: 'home', delay_after_ms: 500 }
+        ]
+      },
+      {
+        id: '00000000-0000-0000-0000-000000000002',
+        name: 'Vertical Feed Infinite Scroll',
+        description: 'Simulates user scrolling a social or e-commerce feed downward three times.',
+        created_at: '2026-11-24T00:00:00Z',
+        steps: [
+          { step_number: 1, type: 'swipe', x: 500, y: 1500, end_x: 500, end_y: 500, duration_ms: 250, delay_after_ms: 600 },
+          { step_number: 2, type: 'swipe', x: 500, y: 1500, end_x: 500, end_y: 500, duration_ms: 250, delay_after_ms: 600 },
+          { step_number: 3, type: 'swipe', x: 500, y: 1500, end_x: 500, end_y: 500, duration_ms: 250, delay_after_ms: 600 },
+          { step_number: 4, type: 'screenshot', label: 'Scrolled Feed', delay_after_ms: 200 }
+        ]
+      },
+      {
+        id: '00000000-0000-0000-0000-000000000003',
+        name: 'Form Autofill & Submit Sequence',
+        description: 'Taps form field, inputs text string, and triggers Enter keyevent.',
+        created_at: '2026-11-24T00:00:00Z',
+        steps: [
+          { step_number: 1, type: 'tap', x: 540, y: 800, delay_after_ms: 300 },
+          { step_number: 2, type: 'text', text: 'studio_automation@local.test', delay_after_ms: 400 },
+          { step_number: 3, type: 'key', keycode: 66, name: 'KEYCODE_ENTER', delay_after_ms: 600 },
+          { step_number: 4, type: 'screenshot', label: 'Form Submitted', delay_after_ms: 200 }
+        ]
+      }
+    ];
+  }
+
+  async saveMacro(_macroDef: MacroDefinition): Promise<boolean> {
+    return true;
+  }
+
+  async deleteMacro(_id: string): Promise<boolean> {
+    return true;
+  }
+
+  async runMacro(macroId: string, deviceId: string): Promise<MacroExecutionResult> {
+    return {
+      macro_id: macroId,
+      macro_name: 'App Cold Launch Smoke',
+      device_id: deviceId,
+      device_name: 'Pixel 8 — Daily Testing',
+      status: 'passed',
+      steps_completed: 3,
+      total_steps: 3,
+      duration_ms: 2000
+    };
+  }
+
+  async runMacroFleet(macroId: string, _deviceIds?: string[]): Promise<MacroExecutionResult[]> {
+    return this.mockDevices.map((d) => ({
+      macro_id: macroId,
+      macro_name: 'App Cold Launch Smoke',
+      device_id: d.id,
+      device_name: d.spec.name,
+      status: 'passed',
+      steps_completed: 3,
+      total_steps: 3,
+      duration_ms: 2000
+    }));
   }
 }
 

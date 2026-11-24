@@ -174,4 +174,17 @@ pub trait Engine {
             "Network conditioning is unavailable".into(),
         ))
     }
+    fn input_key(&mut self, _: &Device, _keycode: u32) -> Result<()> {
+        Err(crate::Error::Unavailable("Key input is unavailable".into()))
+    }
+    fn set_clipboard(&mut self, _: &Device, _text: &str) -> Result<()> {
+        Err(crate::Error::Unavailable(
+            "Clipboard setting is unavailable".into(),
+        ))
+    }
+    fn get_clipboard(&mut self, _: &Device) -> Result<String> {
+        Err(crate::Error::Unavailable(
+            "Clipboard retrieval is unavailable".into(),
+        ))
+    }
 }

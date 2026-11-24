@@ -243,6 +243,66 @@ impl<E: Engine> Manager<E> {
         let device = self.store.get(id)?;
         self.engine.set_network_profile(&device, profile_id)
     }
+    pub fn input_key(&mut self, id: Uuid, keycode: u32) -> Result<()> {
+        let device = self.store.get(id)?;
+        self.engine.input_key(&device, keycode)
+    }
+    pub fn input_text(&mut self, id: Uuid, text: &str) -> Result<()> {
+        let device = self.store.get(id)?;
+        self.engine.input_text(&device, text)
+    }
+    pub fn set_clipboard(&mut self, id: Uuid, text: &str) -> Result<()> {
+        let device = self.store.get(id)?;
+        self.engine.set_clipboard(&device, text)
+    }
+    pub fn get_clipboard(&mut self, id: Uuid) -> Result<String> {
+        let device = self.store.get(id)?;
+        self.engine.get_clipboard(&device)
+    }
+    pub fn list_macros(&self) -> Result<Vec<crate::macro_runner::MacroDefinition>> {
+        self.store.list_macros()
+    }
+    pub fn save_macro(&self, m: &crate::macro_runner::MacroDefinition) -> Result<()> {
+        self.store.save_macro(m)
+    }
+    pub fn delete_macro(&self, id: Uuid) -> Result<()> {
+        self.store.delete_macro(id)
+    }
+    pub fn run_macro(
+        &mut self,
+        macro_id: Uuid,
+        device_id: Uuid,
+    ) -> Result<crate::macro_runner::MacroExecutionResult> {
+        let m = self.store.get_macro(macro_id)?;
+        let device = self.store.get(device_id)?;
+        Ok(crate::macro_runner::MacroRunner::execute_on_device(
+            &mut self.engine,
+            &device,
+            &m,
+        ))
+    }
+    pub fn run_macro_fleet(
+        &mut self,
+        macro_id: Uuid,
+        device_ids: Option<Vec<Uuid>>,
+    ) -> Result<Vec<crate::macro_runner::MacroExecutionResult>> {
+        let m = self.store.get_macro(macro_id)?;
+        let target_devices = match device_ids {
+            Some(ids) if !ids.is_empty() => {
+                let mut devs = Vec::new();
+                for id in ids {
+                    devs.push(self.store.get(id)?);
+                }
+                devs
+            }
+            _ => self.store.list()?,
+        };
+        Ok(crate::macro_runner::MacroRunner::execute_fleet(
+            &mut self.engine,
+            &target_devices,
+            &m,
+        ))
+    }
     pub fn run_matrix_test(
         &mut self,
         device_ids: Option<Vec<Uuid>>,

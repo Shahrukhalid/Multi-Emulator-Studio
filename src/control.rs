@@ -133,6 +133,37 @@ pub enum Request {
         crashes: Option<Vec<crate::diagnostics::ParsedCrash>>,
         fleet: Option<crate::fleet::BroadcastInstallReport>,
     },
+    PreflightReport,
+    InputKey {
+        id: Uuid,
+        keycode: u32,
+    },
+    InputText {
+        id: Uuid,
+        text: String,
+    },
+    SetClipboard {
+        id: Uuid,
+        text: String,
+    },
+    GetClipboard {
+        id: Uuid,
+    },
+    ListMacros,
+    SaveMacro {
+        macro_def: crate::macro_runner::MacroDefinition,
+    },
+    DeleteMacro {
+        id: Uuid,
+    },
+    RunMacro {
+        macro_id: Uuid,
+        device_id: Uuid,
+    },
+    RunMacroFleet {
+        macro_id: Uuid,
+        device_ids: Option<Vec<Uuid>>,
+    },
 }
 pub struct Controller {
     sdk: Sdk,
@@ -325,6 +356,49 @@ impl Controller {
                     fleet.as_ref(),
                 );
                 json!(html)
+            }
+            Request::PreflightReport => {
+                json!(crate::preflight::PreflightAnalyzer::run_diagnostics(
+                    &self.sdk, &self.root
+                ))
+            }
+            Request::InputKey { id, keycode } => {
+                self.manager.input_key(id, keycode)?;
+                json!(true)
+            }
+            Request::InputText { id, text } => {
+                self.manager.input_text(id, &text)?;
+                json!(true)
+            }
+            Request::SetClipboard { id, text } => {
+                self.manager.set_clipboard(id, &text)?;
+                json!(true)
+            }
+            Request::GetClipboard { id } => {
+                json!(self.manager.get_clipboard(id)?)
+            }
+            Request::ListMacros => {
+                json!(self.manager.list_macros()?)
+            }
+            Request::SaveMacro { macro_def } => {
+                self.manager.save_macro(&macro_def)?;
+                json!(true)
+            }
+            Request::DeleteMacro { id } => {
+                self.manager.delete_macro(id)?;
+                json!(true)
+            }
+            Request::RunMacro {
+                macro_id,
+                device_id,
+            } => {
+                json!(self.manager.run_macro(macro_id, device_id)?)
+            }
+            Request::RunMacroFleet {
+                macro_id,
+                device_ids,
+            } => {
+                json!(self.manager.run_macro_fleet(macro_id, device_ids)?)
             }
         })
     }
