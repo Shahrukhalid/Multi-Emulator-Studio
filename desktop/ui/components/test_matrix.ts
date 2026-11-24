@@ -12,6 +12,7 @@ export interface TestMatrixCallbacks {
   onSelectStep: (suiteId: string, stepId: string) => void;
   onBroadcastApk?: () => void;
   onCaptureSynchronized?: () => void;
+  onExportReport?: () => void;
 }
 
 export class TestMatrixComponent {
@@ -123,6 +124,10 @@ export class TestMatrixComponent {
           <button class="filter-pill" id="btn-sync-screenshots" title="Capture simultaneous screenshots across all active devices to compare responsive layouts" style="display: inline-flex; align-items: center; gap: 5px; height: 32px; padding: 0 10px; cursor: pointer;">
             ${Icons.camera}
             <span>Capture All</span>
+          </button>
+          <button class="filter-pill" id="btn-export-matrix-report" title="Export complete self-contained HTML test report" style="display: inline-flex; align-items: center; gap: 5px; height: 32px; padding: 0 10px; cursor: pointer;">
+            ${Icons.external}
+            <span>Export Report</span>
           </button>
 
           <button class="btn-create-primary" id="btn-run-matrix-tests" ${this.isRunning ? 'disabled style="opacity:0.7;"' : ''}>
@@ -284,6 +289,11 @@ export class TestMatrixComponent {
     // Synchronized screenshots button
     this.element.querySelector('#btn-sync-screenshots')?.addEventListener('click', () => {
       this.callbacks.onCaptureSynchronized?.();
+    });
+
+    // Export report button
+    this.element.querySelector('#btn-export-matrix-report')?.addEventListener('click', () => {
+      this.callbacks.onExportReport?.();
     });
 
     // Dismiss broadcast banner button

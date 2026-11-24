@@ -123,6 +123,16 @@ pub enum Request {
     SynchronizedScreenshots {
         device_ids: Option<Vec<Uuid>>,
     },
+    SetNetworkProfile {
+        id: Uuid,
+        profile: String,
+    },
+    GetNetworkProfiles,
+    GenerateReportHtml {
+        matrix: crate::test_runner::MatrixRunReport,
+        crashes: Option<Vec<crate::diagnostics::ParsedCrash>>,
+        fleet: Option<crate::fleet::BroadcastInstallReport>,
+    },
 }
 pub struct Controller {
     sdk: Sdk,
@@ -296,6 +306,25 @@ impl Controller {
             }
             Request::SynchronizedScreenshots { device_ids } => {
                 json!(self.manager.synchronized_screenshots(device_ids)?)
+            }
+            Request::SetNetworkProfile { id, profile } => {
+                self.manager.set_network_profile(id, &profile)?;
+                json!(true)
+            }
+            Request::GetNetworkProfiles => {
+                json!(crate::network::standard_network_profiles())
+            }
+            Request::GenerateReportHtml {
+                matrix,
+                crashes,
+                fleet,
+            } => {
+                let html = crate::report::HtmlReportGenerator::generate_html(
+                    &matrix,
+                    crashes.as_deref(),
+                    fleet.as_ref(),
+                );
+                json!(html)
             }
         })
     }

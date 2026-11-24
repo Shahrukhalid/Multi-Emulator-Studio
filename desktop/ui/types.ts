@@ -115,6 +115,9 @@ export type Request =
   | { action: 'ios_shutdown'; udid: string }
   | { action: 'broadcast_install'; device_ids?: string[]; path: string }
   | { action: 'synchronized_screenshots'; device_ids?: string[] }
+  | { action: 'set_network_profile'; id: string; profile: string }
+  | { action: 'get_network_profiles' }
+  | { action: 'generate_report_html'; matrix: MatrixRunReport; crashes?: ParsedCrash[]; fleet?: BroadcastInstallReport }
   | { action: 'list' }
   | { action: 'tick' }
   | { action: 'network' }
@@ -502,6 +505,17 @@ export interface SynchronizedFrame {
 export interface SynchronizedScreenshotsReport {
   timestamp_ms: number;
   frames: SynchronizedFrame[];
+}
+
+export interface NetworkProfile {
+  id: string;
+  name: string;
+  speed_preset: string;
+  delay_preset: string;
+  download_kbps: number;
+  upload_kbps: number;
+  latency_ms: number;
+  description: string;
 }
 
 export function validateDeviceSpec(spec: DeviceSpec): string | null {

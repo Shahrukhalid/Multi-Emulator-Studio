@@ -170,6 +170,25 @@ export class App {
         } catch (e: any) {
           toast.show(`Capture failed: ${e?.message || e}`, 'error');
         }
+      },
+      onExportReport: async () => {
+        try {
+          toast.show('Generating standalone HTML test report...', 'info');
+          const report = await this.api.runMatrixTest();
+          const html = await this.api.generateReportHtml(report);
+          const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `test-matrix-report-${Date.now()}.html`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+          toast.show('Stand-alone HTML report exported and downloaded!', 'success');
+        } catch (e: any) {
+          toast.show(`Export report failed: ${e?.message || e}`, 'error');
+        }
       }
     });
 
@@ -433,6 +452,14 @@ export class App {
           );
         } catch (e: any) {
           toast.show(`Scan failed: ${e?.message || e}`, 'error');
+        }
+      },
+      onSetNetworkProfile: async (d, profileId) => {
+        try {
+          await this.api.setNetworkProfile(d.id, profileId);
+          toast.show(`Applied network profile: ${profileId.toUpperCase()}`, 'success');
+        } catch (e: any) {
+          toast.show(`Failed to set network profile: ${e?.message || e}`, 'error');
         }
       }
     });
