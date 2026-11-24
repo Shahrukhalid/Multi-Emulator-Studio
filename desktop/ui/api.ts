@@ -17,7 +17,13 @@ import {
   NetworkProfile,
   PreflightReport,
   MacroDefinition,
-  MacroExecutionResult
+  MacroExecutionResult,
+  AudioState,
+  AudioSample,
+  BiometricAction,
+  BatteryState,
+  SensorUpdate,
+  DeviceSensorState
 } from './types.js';
 
 declare const window: Window & {
@@ -92,6 +98,14 @@ export interface IApiClient {
   deleteMacro(id: string): Promise<boolean>;
   runMacro(macroId: string, deviceId: string): Promise<MacroExecutionResult>;
   runMacroFleet(macroId: string, deviceIds?: string[]): Promise<MacroExecutionResult[]>;
+  setAudioState(id: string, volume: number, muted: boolean): Promise<boolean>;
+  injectAudioSample(id: string, sampleId: string): Promise<boolean>;
+  getAudioState(id: string): Promise<AudioState>;
+  getAudioSamples(): Promise<AudioSample[]>;
+  simulateBiometrics(id: string, biometricAction: BiometricAction): Promise<boolean>;
+  setBatteryState(id: string, state: BatteryState): Promise<boolean>;
+  setSensorState(id: string, update: SensorUpdate): Promise<boolean>;
+  getSensorState(id: string): Promise<DeviceSensorState>;
 }
 
 class TauriApiClient implements IApiClient {
@@ -311,6 +325,38 @@ class TauriApiClient implements IApiClient {
   runMacroFleet(macroId: string, deviceIds?: string[]): Promise<MacroExecutionResult[]> {
     return this.dispatch<MacroExecutionResult[]>({ action: 'run_macro_fleet', macro_id: macroId, device_ids: deviceIds });
   }
+
+  setAudioState(id: string, volume: number, muted: boolean): Promise<boolean> {
+    return this.dispatch<boolean>({ action: 'set_audio_state', id, volume, muted });
+  }
+
+  injectAudioSample(id: string, sampleId: string): Promise<boolean> {
+    return this.dispatch<boolean>({ action: 'inject_audio_sample', id, sample_id: sampleId });
+  }
+
+  getAudioState(id: string): Promise<AudioState> {
+    return this.dispatch<AudioState>({ action: 'get_audio_state', id });
+  }
+
+  getAudioSamples(): Promise<AudioSample[]> {
+    return this.dispatch<AudioSample[]>({ action: 'get_audio_samples' });
+  }
+
+  simulateBiometrics(id: string, biometricAction: BiometricAction): Promise<boolean> {
+    return this.dispatch<boolean>({ action: 'simulate_biometrics', id, biometric_action: biometricAction });
+  }
+
+  setBatteryState(id: string, state: BatteryState): Promise<boolean> {
+    return this.dispatch<boolean>({ action: 'set_battery_state', id, state });
+  }
+
+  setSensorState(id: string, update: SensorUpdate): Promise<boolean> {
+    return this.dispatch<boolean>({ action: 'set_sensor_state', id, update });
+  }
+
+  getSensorState(id: string): Promise<DeviceSensorState> {
+    return this.dispatch<DeviceSensorState>({ action: 'get_sensor_state', id });
+  }
 }
 
 /**
@@ -431,6 +477,18 @@ class BrowserPreviewClient implements IApiClient {
         return (await this.runMacro(request.macro_id, request.device_id)) as unknown as T;
       case 'run_macro_fleet':
         return (await this.runMacroFleet(request.macro_id, request.device_ids)) as unknown as T;
+      case 'set_audio_state':
+      case 'inject_audio_sample':
+      case 'simulate_biometrics':
+      case 'set_battery_state':
+      case 'set_sensor_state':
+        return true as unknown as T;
+      case 'get_audio_state':
+        return (await this.getAudioState(request.id)) as unknown as T;
+      case 'get_audio_samples':
+        return (await this.getAudioSamples()) as unknown as T;
+      case 'get_sensor_state':
+        return (await this.getSensorState(request.id)) as unknown as T;
       case 'get_logcat':
         return (await this.getLogcat(request.id, request.lines)) as unknown as T;
       case 'start':
@@ -897,6 +955,84 @@ class BrowserPreviewClient implements IApiClient {
       total_steps: 3,
       duration_ms: 2000
     }));
+  }
+
+  async setAudioState(_id: string, _volume: number, _muted: boolean): Promise<boolean> {
+    return true;
+  }
+
+  async injectAudioSample(_id: string, _sampleId: string): Promise<boolean> {
+    return true;
+  }
+
+  async getAudioState(_id: string): Promise<AudioState> {
+    return {
+      enabled: true,
+      output_volume: 80,
+      muted: false,
+      sample_rate: 44100,
+      channels: 1
+    };
+  }
+
+  async getAudioSamples(): Promise<AudioSample[]> {
+    return [
+      {
+        id: 'speech_test_prompt',
+        title: 'Voice Assistant Prompt (1kHz sine)',
+        category: 'speech',
+        description: 'Synthesized calibration tone for voice input and VoIP test flows.',
+        duration_ms: 1000
+      },
+      {
+        id: 'dtmf_dial_tones',
+        title: 'DTMF Keypad Tone (770Hz / 1336Hz)',
+        category: 'dtmf',
+        description: 'Dual-tone multi-frequency telephone signaling for IVR testing.',
+        duration_ms: 800
+      },
+      {
+        id: 'notification_chime',
+        title: 'Notification Chime (880Hz / 1760Hz)',
+        category: 'chime',
+        description: 'Harmonic high-pitch chime for push notification audio verification.',
+        duration_ms: 600
+      },
+      {
+        id: 'ambient_cafeteria_noise',
+        title: 'Cafeteria Ambient Noise',
+        category: 'ambience',
+        description: 'Multi-frequency background chatter simulation for microphone noise suppression.',
+        duration_ms: 2000
+      }
+    ];
+  }
+
+  async simulateBiometrics(_id: string, _action: BiometricAction): Promise<boolean> {
+    return true;
+  }
+
+  async setBatteryState(_id: string, _state: BatteryState): Promise<boolean> {
+    return true;
+  }
+
+  async setSensorState(_id: string, _update: SensorUpdate): Promise<boolean> {
+    return true;
+  }
+
+  async getSensorState(_id: string): Promise<DeviceSensorState> {
+    return {
+      battery: {
+        capacity_percent: 85,
+        ac_plugged: true,
+        status: 'Charging',
+        health: 'Good'
+      },
+      accelerometer: [0, 9.81, 0],
+      gyroscope: [0, 0, 0],
+      proximity_cm: 5.0,
+      light_lux: 300.0
+    };
   }
 }
 

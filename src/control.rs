@@ -164,6 +164,34 @@ pub enum Request {
         macro_id: Uuid,
         device_ids: Option<Vec<Uuid>>,
     },
+    SetAudioState {
+        id: Uuid,
+        volume: u32,
+        muted: bool,
+    },
+    InjectAudioSample {
+        id: Uuid,
+        sample_id: String,
+    },
+    GetAudioState {
+        id: Uuid,
+    },
+    GetAudioSamples,
+    SimulateBiometrics {
+        id: Uuid,
+        biometric_action: crate::sensor::BiometricAction,
+    },
+    SetBatteryState {
+        id: Uuid,
+        state: crate::sensor::BatteryState,
+    },
+    SetSensorState {
+        id: Uuid,
+        update: crate::sensor::SensorUpdate,
+    },
+    GetSensorState {
+        id: Uuid,
+    },
 }
 pub struct Controller {
     sdk: Sdk,
@@ -399,6 +427,38 @@ impl Controller {
                 device_ids,
             } => {
                 json!(self.manager.run_macro_fleet(macro_id, device_ids)?)
+            }
+            Request::SetAudioState { id, volume, muted } => {
+                self.manager.set_audio_state(id, volume, muted)?;
+                json!(true)
+            }
+            Request::InjectAudioSample { id, sample_id } => {
+                self.manager.inject_audio_sample(id, &sample_id)?;
+                json!(true)
+            }
+            Request::GetAudioState { id } => {
+                json!(self.manager.get_audio_state(id)?)
+            }
+            Request::GetAudioSamples => {
+                json!(crate::audio::AudioEngine::standard_samples())
+            }
+            Request::SimulateBiometrics {
+                id,
+                biometric_action,
+            } => {
+                self.manager.simulate_biometrics(id, biometric_action)?;
+                json!(true)
+            }
+            Request::SetBatteryState { id, state } => {
+                self.manager.set_battery_state(id, state)?;
+                json!(true)
+            }
+            Request::SetSensorState { id, update } => {
+                self.manager.set_sensor_state(id, update)?;
+                json!(true)
+            }
+            Request::GetSensorState { id } => {
+                json!(self.manager.get_sensor_state(id)?)
             }
         })
     }

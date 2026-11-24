@@ -449,6 +449,67 @@ impl Engine for IosEngine {
     fn touch(&mut self, _d: &Device, _input: TouchInput) -> Result<()> {
         Ok(())
     }
+
+    fn set_audio_state(&mut self, _d: &Device, _volume: u32, _muted: bool) -> Result<()> {
+        Ok(())
+    }
+
+    fn inject_audio_sample(&mut self, _d: &Device, _sample_id: &str) -> Result<()> {
+        Ok(())
+    }
+
+    fn simulate_biometrics(
+        &mut self,
+        d: &Device,
+        action: crate::sensor::BiometricAction,
+    ) -> Result<()> {
+        if let Some(udid) = self.active_sessions.get(&d.id) {
+            if Self::is_simctl_available() {
+                let sub = match action {
+                    crate::sensor::BiometricAction::Match { .. } => "match",
+                    _ => "unmatch",
+                };
+                let _ = Command::new("xcrun")
+                    .args(["simctl", "biometrics", udid, sub])
+                    .output();
+            }
+        }
+        Ok(())
+    }
+
+    fn set_battery_state(&mut self, d: &Device, state: crate::sensor::BatteryState) -> Result<()> {
+        if let Some(udid) = self.active_sessions.get(&d.id) {
+            if Self::is_simctl_available() {
+                let lvl = state.capacity.clamp(0, 100).to_string();
+                let bstate = if state.charging {
+                    "charging"
+                } else {
+                    "discharging"
+                };
+                let _ = Command::new("xcrun")
+                    .args([
+                        "simctl",
+                        "status_bar",
+                        udid,
+                        "override",
+                        "--batteryLevel",
+                        &lvl,
+                        "--batteryState",
+                        bstate,
+                    ])
+                    .output();
+            }
+        }
+        Ok(())
+    }
+
+    fn set_sensor_state(
+        &mut self,
+        _d: &Device,
+        _update: crate::sensor::SensorUpdate,
+    ) -> Result<()> {
+        Ok(())
+    }
 }
 
 #[cfg(test)]
