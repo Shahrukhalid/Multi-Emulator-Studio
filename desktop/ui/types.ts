@@ -105,6 +105,7 @@ export type Request =
   | { action: 'set_location'; id: string; latitude: number; longitude: number; timezone?: string | null }
   | { action: 'get_logcat'; id: string; lines?: number }
   | { action: 'rotate'; id: string; orientation: 'portrait' | 'landscape' }
+  | { action: 'set_proxy_target'; id: string; target?: string }
   | { action: 'list' }
   | { action: 'tick' }
   | { action: 'network' }
