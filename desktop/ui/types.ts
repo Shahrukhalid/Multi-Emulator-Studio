@@ -21,6 +21,8 @@ export interface DeviceSpec {
   disk_mb: number;
   locale: string;
   graphics_mode?: 'auto' | 'software';
+  proxy?: string;
+  location_preset?: string;
 }
 
 export interface Device {
@@ -100,6 +102,9 @@ export type Request =
   | { action: 'open_youtube_store'; id: string }
   | { action: 'navigate'; id: string; key: NavigationKey }
   | { action: 'touch'; id: string; input: TouchInput }
+  | { action: 'set_location'; id: string; latitude: number; longitude: number; timezone?: string | null }
+  | { action: 'get_logcat'; id: string; lines?: number }
+  | { action: 'rotate'; id: string; orientation: 'portrait' | 'landscape' }
   | { action: 'list' }
   | { action: 'tick' }
   | { action: 'network' }
@@ -277,6 +282,120 @@ export const CURATED_TEMPLATES: CuratedTemplate[] = [
     features: ['2 GB RAM Economy Mode', 'Low Host Overhead', 'Fast Boot']
   }
 ];
+
+export interface GeoLocationPreset {
+  id: string;
+  name: string;
+  country: string;
+  flag: string;
+  city: string;
+  latitude: number;
+  longitude: number;
+  timezone: string;
+  proxyUrl?: string;
+  ip: string;
+  latencyMs: number;
+}
+
+export const GEO_LOCATION_PRESETS: GeoLocationPreset[] = [
+  {
+    id: 'us-east',
+    name: 'US East (New York)',
+    country: 'United States',
+    flag: '🇺🇸',
+    city: 'New York',
+    latitude: 40.7128,
+    longitude: -74.006,
+    timezone: 'America/New_York',
+    ip: '198.51.100.45',
+    latencyMs: 18,
+  },
+  {
+    id: 'us-west',
+    name: 'US West (Los Angeles)',
+    country: 'United States',
+    flag: '🇺🇸',
+    city: 'Los Angeles',
+    latitude: 34.0522,
+    longitude: -118.2437,
+    timezone: 'America/Los_Angeles',
+    ip: '198.51.100.89',
+    latencyMs: 32,
+  },
+  {
+    id: 'uk-london',
+    name: 'United Kingdom (London)',
+    country: 'United Kingdom',
+    flag: '🇬🇧',
+    city: 'London',
+    latitude: 51.5074,
+    longitude: -0.1278,
+    timezone: 'Europe/London',
+    ip: '203.0.113.12',
+    latencyMs: 45,
+  },
+  {
+    id: 'de-frankfurt',
+    name: 'Germany (Frankfurt)',
+    country: 'Germany',
+    flag: '🇩🇪',
+    city: 'Frankfurt',
+    latitude: 50.1109,
+    longitude: 8.6821,
+    timezone: 'Europe/Berlin',
+    ip: '198.18.0.34',
+    latencyMs: 52,
+  },
+  {
+    id: 'jp-tokyo',
+    name: 'Japan (Tokyo)',
+    country: 'Japan',
+    flag: '🇯🇵',
+    city: 'Tokyo',
+    latitude: 35.6762,
+    longitude: 139.6503,
+    timezone: 'Asia/Tokyo',
+    ip: '203.0.113.78',
+    latencyMs: 84,
+  },
+  {
+    id: 'sg-singapore',
+    name: 'Singapore',
+    country: 'Singapore',
+    flag: '🇸🇬',
+    city: 'Singapore',
+    latitude: 1.3521,
+    longitude: 103.8198,
+    timezone: 'Asia/Singapore',
+    ip: '198.51.100.120',
+    latencyMs: 96,
+  },
+];
+
+export interface MatrixTestStep {
+  id: string;
+  suite: string;
+  title: string;
+  status: 'passed' | 'failed' | 'running' | 'pending';
+  durationMs?: number;
+}
+
+export interface MatrixTestSuite {
+  id: string;
+  name: string;
+  steps: MatrixTestStep[];
+}
+
+export interface MatrixDeviceSnapshot {
+  deviceId: string;
+  deviceName: string;
+  osVersion: string;
+  formFactor: 'phone' | 'tablet' | 'foldable';
+  status: 'passed' | 'failed';
+  errorStepId?: string;
+  errorMessage?: string;
+  screenColor?: string;
+}
 
 export function validateDeviceSpec(spec: DeviceSpec): string | null {
   const safe = (s: string) =>

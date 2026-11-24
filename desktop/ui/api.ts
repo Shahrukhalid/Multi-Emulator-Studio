@@ -54,6 +54,9 @@ export interface IApiClient {
   deleteDevice(id: string): Promise<boolean>;
   installApk(id: string, path: string): Promise<boolean>;
   getLogs(id: string): Promise<string>;
+  setLocation(id: string, latitude: number, longitude: number, timezone: string): Promise<boolean>;
+  getLogcat(id: string, lines?: number): Promise<string>;
+  rotateDevice(id: string, orientation: 'portrait' | 'landscape'): Promise<boolean>;
 }
 
 class TauriApiClient implements IApiClient {
@@ -169,6 +172,18 @@ class TauriApiClient implements IApiClient {
   getLogs(id: string): Promise<string> {
     return this.dispatch<string>({ action: 'logs', id });
   }
+
+  setLocation(id: string, latitude: number, longitude: number, timezone: string): Promise<boolean> {
+    return this.dispatch<boolean>({ action: 'set_location', id, latitude, longitude, timezone });
+  }
+
+  getLogcat(id: string, lines: number = 200): Promise<string> {
+    return this.dispatch<string>({ action: 'get_logcat', id, lines });
+  }
+
+  rotateDevice(id: string, orientation: 'portrait' | 'landscape'): Promise<boolean> {
+    return this.dispatch<boolean>({ action: 'rotate', id, orientation });
+  }
 }
 
 /**
@@ -255,6 +270,11 @@ class BrowserPreviewClient implements IApiClient {
         return (await this.listDevices()) as unknown as T;
       case 'create':
         return (await this.createDevice(request.spec)) as unknown as T;
+      case 'set_location':
+      case 'rotate':
+        return true as unknown as T;
+      case 'get_logcat':
+        return (await this.getLogcat(request.id, request.lines)) as unknown as T;
       case 'start':
       case 'stop':
       case 'restart':
@@ -380,6 +400,26 @@ class BrowserPreviewClient implements IApiClient {
 
   async getLogs(_id: string): Promise<string> {
     return 'Logs require a running desktop emulator process.';
+  }
+
+  async setLocation(_id: string, _latitude: number, _longitude: number, _timezone: string): Promise<boolean> {
+    return true;
+  }
+
+  async getLogcat(_id: string, _lines: number = 200): Promise<string> {
+    return `07-14 06:47:28.517 28730 28770 D webrtc : pnIceConnectionReceivingChange: false
+07-14 06:47:29.620 28730 28775 D webrtc : pnIceConnectionReceivingChange: true
+07-14 06:47:29.801 741 741 E audit : type=1400 audit(1667781249.878:832365): avc: denied { read } for pid=1110 comm="system_server" ino=81658 dev="sysfs" scontext=u:r:system_server:s0 tcontext=u:object_r:sysfs:s0 tclass=file permissive=0
+07-14 06:47:30.101 2303 18452 D DhcpClient: Received packet: 08:77:12:00:91:8e OFFER, ip 10.0.4.110/26, mask 255.255.240.0, DNS servers: /209.237.236.11 /209.237.236.22, domain studio.net
+07-14 06:48:06.288 1110 2161 D SecContentProvider: query(), uri = 17 selection = isSettingsChangesAllowed
+07-14 06:48:08.455 1110 2161 D SettingsProvider: ret = 1
+07-14 06:48:08.455 1110 2161 D SettingsProvider: isChangeAllowed(): name = user_rotation
+07-14 06:48:08.463 1110 2161 D SettingsProvider: isSettingsChangesAllowedAsUser, userId = 0
+07-14 06:48:10.120 1205 1205 I ActivityTaskManager: Displayed com.android.settings/.Settings: +342ms`;
+  }
+
+  async rotateDevice(_id: string, _orientation: 'portrait' | 'landscape'): Promise<boolean> {
+    return true;
   }
 }
 

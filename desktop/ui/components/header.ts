@@ -1,6 +1,6 @@
 import { Icons } from '../icons.js';
 
-export type MainNavTab = 'devices' | 'templates' | 'settings';
+export type MainNavTab = 'devices' | 'templates' | 'downloads' | 'matrix' | 'settings';
 
 export interface HeaderProps {
   activeTab: MainNavTab;
@@ -51,17 +51,28 @@ export class HeaderComponent {
           <div class="brand-icon-box">
             ${Icons.android}
           </div>
-          <div class="brand-label"><span class="brand-name">Multi-Emulator Studio</span><span class="brand-subtitle">Android workspace</span></div>
+          <div class="brand-label">
+            <span class="brand-name">Multi-Emulator Studio</span>
+            <span class="brand-subtitle">v2.0 Design System</span>
+          </div>
         </div>
 
         <nav class="primary-nav" aria-label="Studio navigation">
           <button class="nav-item ${this.props.activeTab === 'devices' ? 'active' : ''}" data-tab="devices">
             ${Icons.devices}
-            <span>My Devices</span>
+            <span>Devices</span>
           </button>
           <button class="nav-item ${this.props.activeTab === 'templates' ? 'active' : ''}" data-tab="templates">
             ${Icons.templates}
             <span>Templates</span>
+          </button>
+          <button class="nav-item ${this.props.activeTab === 'downloads' ? 'active' : ''}" data-tab="downloads">
+            ${Icons.download}
+            <span>Downloads</span>
+          </button>
+          <button class="nav-item ${this.props.activeTab === 'matrix' ? 'active' : ''}" data-tab="matrix">
+            ${Icons.matrix}
+            <span>Test Matrix</span>
           </button>
           <button class="nav-item ${this.props.activeTab === 'settings' ? 'active' : ''}" data-tab="settings">
             ${Icons.settings}

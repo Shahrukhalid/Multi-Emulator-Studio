@@ -11,6 +11,7 @@ export interface DeviceCardCallbacks {
   onDuplicate: (device: Device) => void;
   onInstallApk: (device: Device) => void;
   onDelete: (device: Device) => void;
+  onDetails?: (device: Device) => void;
 }
 
 export class DeviceCardComponent {
@@ -153,6 +154,7 @@ export class DeviceCardComponent {
 
       <!-- Context Menu Dropdown -->
       <div class="context-menu-popover" id="device-context-menu" style="display: ${this.isMenuOpen ? 'flex' : 'none'};">
+        <button class="context-menu-item" id="ctx-details">View Details</button>
         ${isRunning ? `<button class="context-menu-item" id="ctx-restart">Restart</button>` : ''}
         ${isRunning || isStarting || isQueued ? `<button class="context-menu-item" id="ctx-stop">${isQueued ? 'Cancel queued start' : 'Stop'}</button>` : ''}
         <button class="context-menu-item" id="ctx-apk" ${!isRunning ? 'disabled style="opacity: 0.5;"' : ''}>Install APK...</button>
@@ -189,6 +191,14 @@ export class DeviceCardComponent {
         menu.style.display = 'none';
       }
     };
+
+    this.element.querySelector('.card-device-preview')?.addEventListener('click', () => {
+      this.callbacks.onDetails?.(this.device);
+    });
+
+    this.element.querySelector('#ctx-details')?.addEventListener('click', () => {
+      this.callbacks.onDetails?.(this.device);
+    });
 
     this.element.querySelector('#ctx-stop')?.addEventListener('click', () => {
       this.callbacks.onStop(this.device);

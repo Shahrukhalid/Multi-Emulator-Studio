@@ -155,6 +155,8 @@ fn verify(
             disk_mb: 2048,
             locale: "en-US".into(),
             graphics_mode: GraphicsMode::Auto,
+            proxy: None,
+            location_preset: None,
         })?;
         ids.push(device.id);
     }

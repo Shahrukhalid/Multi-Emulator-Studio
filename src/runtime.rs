@@ -133,4 +133,25 @@ pub trait Engine {
             "Touch input is unavailable".into(),
         ))
     }
+    fn set_location(
+        &mut self,
+        _: &Device,
+        _lat: f64,
+        _lon: f64,
+        _timezone: Option<&str>,
+    ) -> Result<()> {
+        Err(crate::Error::Unavailable(
+            "Location mocking is unavailable".into(),
+        ))
+    }
+    fn get_logcat(&mut self, _: &Device, _lines: usize) -> Result<String> {
+        Err(crate::Error::Unavailable(
+            "Live logcat is unavailable".into(),
+        ))
+    }
+    fn rotate(&mut self, _: &Device, _orientation: &str) -> Result<()> {
+        Err(crate::Error::Unavailable(
+            "Screen rotation is unavailable".into(),
+        ))
+    }
 }
