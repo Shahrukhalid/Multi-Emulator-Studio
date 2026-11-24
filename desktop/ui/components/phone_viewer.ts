@@ -122,6 +122,18 @@ export class PhoneViewer {
             <span style="font-size: 14px;">⏱</span>
             <span class="rail-tooltip">Checkpoints</span>
           </button>
+          <button class="rail-btn" data-action="profiler" title="Real-Time Performance Profiler & Resource Graphs" aria-label="Performance Profiler">
+            <span style="font-size: 14px;">📊</span>
+            <span class="rail-tooltip">Performance Profiler</span>
+          </button>
+          <button class="rail-btn" data-action="intent" title="Deep Link & Push Notification Intent Studio" aria-label="Intent Studio">
+            <span style="font-size: 14px;">⚡</span>
+            <span class="rail-tooltip">Intent & Deep Link</span>
+          </button>
+          <button class="rail-btn" data-action="devtools" title="Remote WebView DevTools & WebKit Inspector" aria-label="DevTools Bridge">
+            <span style="font-size: 14px;">🔍</span>
+            <span class="rail-tooltip">WebView DevTools</span>
+          </button>
           <div class="rail-divider"></div>
           <button class="rail-btn" data-action="pip" title="Picture-in-Picture Floating Mode" aria-label="PiP Mode">
             <span style="font-size: 14px;">⧉</span>
@@ -268,6 +280,15 @@ export class PhoneViewer {
     });
     this.element.querySelector('[data-action="snapshot"]')?.addEventListener('click', () => {
       void this.showSnapshotDialog();
+    });
+    this.element.querySelector('[data-action="profiler"]')?.addEventListener('click', () => {
+      void this.showProfilerDialog();
+    });
+    this.element.querySelector('[data-action="intent"]')?.addEventListener('click', () => {
+      void this.showIntentDialog();
+    });
+    this.element.querySelector('[data-action="devtools"]')?.addEventListener('click', () => {
+      void this.showDevToolsDialog();
     });
     this.element.querySelector('[data-action="pip"]')?.addEventListener('click', () => {
       this.togglePipMode();
@@ -1295,6 +1316,148 @@ export class PhoneViewer {
       toast.show(`Detached ${this.device.spec.name} into floating window.`, 'success');
     } else {
       toast.show('Pop-up window was blocked by the browser. Please allow popups.', 'warning');
+    }
+  }
+
+  private async showProfilerDialog(): Promise<void> {
+    try {
+      const sample = await this.api.getPerformanceSample(this.device.id);
+      const action = window.prompt(
+        `📊 Live Performance Profiler & Resource Monitor (${this.device.spec.name}):\n\n` +
+          `• CPU Usage: ${sample.cpu_percent.toFixed(1)}%\n` +
+          `• RAM Allocated: ${sample.ram_used_mb} MB / ${sample.ram_total_mb} MB (${Math.round((sample.ram_used_mb / sample.ram_total_mb) * 100)}%)\n` +
+          `    - Dalvik/ART Heap: ${sample.ram_dalvik_mb} MB\n` +
+          `    - Native Heap: ${sample.ram_native_mb} MB\n` +
+          `    - Graphics & Textures: ${sample.ram_graphics_mb} MB\n` +
+          `• Frame Rate: ${sample.fps.toFixed(1)} FPS (Jank frames: ${sample.jank_frames})\n` +
+          `• Battery Temperature: ${sample.battery_temp_c.toFixed(1)} °C\n\n` +
+          `Select an action:\n` +
+          `1. Refresh live metrics\n` +
+          `2. Export telemetry timeline trace (.CSV)\n` +
+          `3. Close`,
+        '1'
+      );
+
+      if (action === '1') {
+        void this.showProfilerDialog();
+      } else if (action === '2') {
+        const csv = await this.api.exportProfileCsv(this.device.id);
+        const blob = new Blob([csv], { type: 'text/csv' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `mes-profiler-${this.device.spec.name.toLowerCase().replace(/\s+/g, '-')}-${Date.now()}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+        toast.show('Performance telemetry CSV exported successfully!', 'success');
+      }
+    } catch (err: unknown) {
+      toast.show(`Profiler query error: ${(err as { message?: string }).message || String(err)}`, 'error');
+    }
+  }
+
+  private async showIntentDialog(): Promise<void> {
+    try {
+      const mode = window.prompt(
+        `⚡ Deep Link & Intent Injection Studio (${this.device.spec.name}):\n\n` +
+          `1. Dispatch Deep Link (URL Scheme / Universal Link)\n` +
+          `2. Dispatch Custom Android Intent (ACTION_VIEW, SEND, custom extras)\n` +
+          `3. Simulate Push Notification (Mock FCM / Local Alert)\n\n` +
+          `Choose mode (1-3):`,
+        '1'
+      );
+      if (!mode) return;
+
+      if (mode.trim() === '1') {
+        const uri = window.prompt(
+          `Enter Deep Link URI:\n(e.g. myapp://checkout?item=101 or https://app.example.com/promo)`,
+          'myapp://home?tab=dashboard'
+        );
+        if (!uri || !uri.trim()) return;
+        const pkg = window.prompt('Optional explicit package filter (or leave empty for default):', '');
+        await this.api.dispatchDeepLink({
+          device_id: this.device.id,
+          uri: uri.trim(),
+          package: pkg?.trim() || undefined
+        });
+        toast.show(`Dispatched deep link: ${uri.trim()}`, 'success');
+      } else if (mode.trim() === '2') {
+        const action = window.prompt(
+          `Enter Intent Action (e.g. android.intent.action.VIEW, android.intent.action.SEND):`,
+          'android.intent.action.VIEW'
+        );
+        if (!action || !action.trim()) return;
+        const dataUri = window.prompt('Optional Data URI (or leave empty):', 'https://example.com');
+        const extraKey = window.prompt('Optional Extra Key (or leave empty):', 'auth_token');
+        const extraVal = extraKey ? window.prompt(`Value for ${extraKey}:`, 'test_token_2026') : null;
+
+        const extras = extraKey && extraVal ? [{ key: extraKey, value_type: 'string' as const, value: extraVal }] : [];
+        await this.api.dispatchIntent({
+          device_id: this.device.id,
+          action: action.trim(),
+          data_uri: dataUri?.trim() || undefined,
+          extras
+        });
+        toast.show(`Intent ${action.trim()} dispatched!`, 'success');
+      } else if (mode.trim() === '3') {
+        const title = window.prompt('Push Notification Title:', 'Special Offer 50% Off');
+        if (!title || !title.trim()) return;
+        const body = window.prompt('Push Notification Message Body:', 'Your cart items are reserved for the next 24 hours.');
+        if (!body || !body.trim()) return;
+
+        await this.api.simulateNotification({
+          device_id: this.device.id,
+          title: title.trim(),
+          body: body.trim(),
+          channel_id: 'marketing_alerts',
+          tag: 'mes_simulated_alert'
+        });
+        toast.show(`Simulated push notification: "${title.trim()}" posted to device!`, 'success');
+      }
+    } catch (err: unknown) {
+      toast.show(`Intent injection error: ${(err as { message?: string }).message || String(err)}`, 'error');
+    }
+  }
+
+  private async showDevToolsDialog(): Promise<void> {
+    try {
+      const port = 9222;
+      toast.show(`Forwarding Chrome/WebView DevTools to tcp:${port}…`, 'info');
+      await this.api.enableDevToolsForwarding(this.device.id, port);
+      const targets = await this.api.listDevToolsTargets(this.device.id, port);
+
+      const listStr =
+        targets.length > 0
+          ? targets.map((t, idx) => `${idx + 1}. [${t.type.toUpperCase()}] ${t.title} (${t.url})`).join('\n')
+          : 'No active inspectable WebViews detected.';
+
+      const choice = window.prompt(
+        `🔍 Remote WebView DevTools & WebKit Inspector (${this.device.spec.name}):\n\n` +
+          `Active DevTools forward: 127.0.0.1:${port}\n\n` +
+          `Detected WebViews:\n${listStr}\n\n` +
+          `Select target number to copy DevTools inspection URL, or type "inspect" to copy chrome://inspect link:`,
+        '1'
+      );
+
+      if (choice && choice.toLowerCase().trim() === 'inspect') {
+        if (navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText('chrome://inspect/#devices');
+          toast.show('Copied "chrome://inspect/#devices" to clipboard! Paste into Chrome/Edge.', 'success');
+        }
+      } else if (choice) {
+        const idx = parseInt(choice.trim(), 10) - 1;
+        if (!isNaN(idx) && idx >= 0 && idx < targets.length) {
+          const t = targets[idx];
+          if (navigator.clipboard?.writeText) {
+            await navigator.clipboard.writeText(t.devtools_frontend_url);
+            toast.show(`Copied DevTools URL for "${t.title}" to clipboard!`, 'success');
+          }
+        }
+      }
+    } catch (err: unknown) {
+      toast.show(`DevTools bridge error: ${(err as { message?: string }).message || String(err)}`, 'error');
     }
   }
 

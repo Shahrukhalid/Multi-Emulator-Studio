@@ -228,6 +228,33 @@ pub enum Request {
         path: PathBuf,
         remote_path: Option<String>,
     },
+    GetPerformanceSample {
+        id: Uuid,
+    },
+    ExportProfileCsv {
+        id: Uuid,
+    },
+    DispatchDeepLink {
+        id: Uuid,
+        req: crate::intent::DeepLinkRequest,
+    },
+    DispatchIntent {
+        id: Uuid,
+        req: crate::intent::IntentRequest,
+    },
+    SimulateNotification {
+        id: Uuid,
+        req: crate::intent::NotificationSimulationRequest,
+    },
+    EnableDevToolsForwarding {
+        id: Uuid,
+        local_port: Option<u16>,
+        socket: Option<String>,
+    },
+    ListDevToolsTargets {
+        id: Uuid,
+        local_port: Option<u16>,
+    },
 }
 pub struct Controller {
     sdk: Sdk,
@@ -545,6 +572,35 @@ impl Controller {
                 remote_path,
             } => {
                 json!(self.manager.push_file(id, &path, remote_path.as_deref())?)
+            }
+            Request::GetPerformanceSample { id } => {
+                json!(self.manager.get_performance_sample(id)?)
+            }
+            Request::ExportProfileCsv { id } => {
+                json!(self.manager.export_profile_csv(id))
+            }
+            Request::DispatchDeepLink { id, req } => {
+                json!(self.manager.dispatch_deep_link(id, &req)?)
+            }
+            Request::DispatchIntent { id, req } => {
+                json!(self.manager.dispatch_intent(id, &req)?)
+            }
+            Request::SimulateNotification { id, req } => {
+                json!(self.manager.simulate_notification(id, &req)?)
+            }
+            Request::EnableDevToolsForwarding {
+                id,
+                local_port,
+                socket,
+            } => {
+                let port = local_port.unwrap_or(9222);
+                json!(self
+                    .manager
+                    .enable_devtools_forwarding(id, port, socket.as_deref())?)
+            }
+            Request::ListDevToolsTargets { id, local_port } => {
+                let port = local_port.unwrap_or(9222);
+                json!(self.manager.list_devtools_targets(id, port)?)
             }
         })
     }

@@ -27,6 +27,7 @@ pub struct Manager<E: Engine> {
     engine: E,
     queue: VecDeque<Uuid>,
     failed_starts: HashMap<Uuid, String>,
+    profiler: crate::profiler::ProfilerEngine,
     // Drop last: the store and emulator engine must be closed before releasing ownership.
     _lock: ControllerLock,
 }
@@ -57,6 +58,7 @@ impl<E: Engine> Manager<E> {
             _lock: lock,
             queue: VecDeque::new(),
             failed_starts: HashMap::new(),
+            profiler: crate::profiler::ProfilerEngine::new(),
         })
     }
     pub fn list(&self) -> Result<Vec<Device>> {
@@ -356,6 +358,60 @@ impl<E: Engine> Manager<E> {
         channel: crate::updater::UpdateChannel,
     ) -> crate::updater::UpdateCheckResult {
         crate::updater::UpdaterEngine::check_for_updates(channel)
+    }
+    pub fn get_performance_sample(
+        &mut self,
+        id: Uuid,
+    ) -> Result<crate::profiler::PerformanceSample> {
+        let device = self.store.get(id)?;
+        let sample = self.engine.get_performance_sample(&device)?;
+        self.profiler.record_sample(&id.to_string(), sample.clone());
+        Ok(sample)
+    }
+    pub fn export_profile_csv(&self, id: Uuid) -> String {
+        self.profiler.export_csv(&id.to_string())
+    }
+    pub fn dispatch_deep_link(
+        &mut self,
+        id: Uuid,
+        req: &crate::intent::DeepLinkRequest,
+    ) -> Result<String> {
+        let device = self.store.get(id)?;
+        self.engine.dispatch_deep_link(&device, req)
+    }
+    pub fn dispatch_intent(
+        &mut self,
+        id: Uuid,
+        req: &crate::intent::IntentRequest,
+    ) -> Result<String> {
+        let device = self.store.get(id)?;
+        self.engine.dispatch_intent(&device, req)
+    }
+    pub fn simulate_notification(
+        &mut self,
+        id: Uuid,
+        req: &crate::intent::NotificationSimulationRequest,
+    ) -> Result<String> {
+        let device = self.store.get(id)?;
+        self.engine.simulate_notification(&device, req)
+    }
+    pub fn enable_devtools_forwarding(
+        &mut self,
+        id: Uuid,
+        local_port: u16,
+        socket: Option<&str>,
+    ) -> Result<u16> {
+        let device = self.store.get(id)?;
+        self.engine
+            .enable_devtools_forwarding(&device, local_port, socket)
+    }
+    pub fn list_devtools_targets(
+        &mut self,
+        id: Uuid,
+        local_port: u16,
+    ) -> Result<Vec<crate::devtools::DevToolsTarget>> {
+        let device = self.store.get(id)?;
+        self.engine.list_devtools_targets(&device, local_port)
     }
     pub fn list_macros(&self) -> Result<Vec<crate::macro_runner::MacroDefinition>> {
         self.store.list_macros()
