@@ -108,11 +108,20 @@ pub enum Request {
     GetTelemetry {
         id: Uuid,
     },
+    IosRuntimes,
+    IosDevices,
+    IosBoot {
+        udid: String,
+    },
+    IosShutdown {
+        udid: String,
+    },
 }
 pub struct Controller {
     sdk: Sdk,
     manager: Manager<Android>,
     root: PathBuf,
+    ios: crate::ios::IosEngine,
 }
 impl Controller {
     pub fn qa_profiles_idle(&mut self) -> Result<bool> {
@@ -173,6 +182,7 @@ impl Controller {
             sdk,
             manager,
             root: root.to_path_buf(),
+            ios: crate::ios::IosEngine::new(),
         })
     }
     pub fn execute(&mut self, r: Request) -> std::result::Result<Value, ApiError> {
@@ -263,6 +273,16 @@ impl Controller {
             }
             Request::GetTelemetry { id } => {
                 json!(self.manager.get_telemetry(id)?)
+            }
+            Request::IosRuntimes => json!(self.ios.list_runtimes()?),
+            Request::IosDevices => json!(self.ios.list_devices()?),
+            Request::IosBoot { udid } => {
+                self.ios.boot_simulator(&udid)?;
+                json!(true)
+            }
+            Request::IosShutdown { udid } => {
+                self.ios.shutdown_simulator(&udid)?;
+                json!(true)
             }
         })
     }

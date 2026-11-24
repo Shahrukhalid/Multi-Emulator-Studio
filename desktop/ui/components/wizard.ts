@@ -162,10 +162,26 @@ export class WizardComponent {
     }
 
     if (this.currentStep === 3) {
+      const presets = this.selectedPlatform === 'ios'
+        ? [
+            { id: 'ios-iphone-15-pro', name: 'iPhone 15 Pro', ram: '8 GB', res: '1179 × 2556', width: 1179, height: 2556, rec: true },
+            { id: 'ios-iphone-15', name: 'iPhone 15', ram: '6 GB', res: '1179 × 2556', width: 1179, height: 2556, rec: false },
+            { id: 'ios-ipad-air', name: 'iPad Air (5th gen)', ram: '8 GB', res: '1640 × 2360', width: 1640, height: 2360, rec: false }
+          ]
+        : DEVICE_PRESETS.map((p, idx) => ({
+            id: p.id,
+            name: p.name,
+            ram: `${Math.round(p.recommendedRamMb / 1024)} GB`,
+            res: `${p.width} × ${p.height}`,
+            width: p.width,
+            height: p.height,
+            rec: idx === 0
+          }));
+
       return `
         <div class="wizard-template-list">
-          ${DEVICE_PRESETS.map((p, idx) => {
-            const isSelected = p.id === this.selectedPreset.id;
+          ${presets.map((p) => {
+            const isSelected = this.selectedPreset.id === p.id || (this.selectedPlatform === 'ios' && this.deviceName.startsWith(p.name));
             return `
               <div class="wizard-template-item ${isSelected ? 'selected' : ''}" data-preset-id="${p.id}">
                 <div class="template-item-left">
@@ -173,12 +189,12 @@ export class WizardComponent {
                   <div>
                     <div style="display: flex; align-items: center; gap: 8px;">
                       <strong>${p.name}</strong>
-                      ${idx === 0 ? '<span class="badge-recommended">Recommended</span>' : ''}
+                      ${p.rec ? '<span class="badge-recommended">Recommended</span>' : ''}
                     </div>
-                    <span class="template-meta">Android 14/15 · ${Math.round(p.recommendedRamMb / 1024)} GB RAM · 128 GB</span>
+                    <span class="template-meta">${this.selectedPlatform === 'ios' ? 'iOS 17.4 · ' : 'Android 14/15 · '}${p.ram} RAM · 128 GB</span>
                   </div>
                 </div>
-                <span class="template-res">${p.width} × ${p.height}</span>
+                <span class="template-res">${p.res}</span>
               </div>
             `;
           }).join('')}
@@ -187,9 +203,11 @@ export class WizardComponent {
     }
 
     if (this.currentStep === 4) {
-      const versionOptions = friendlyVersions.length > 0
-        ? friendlyVersions.map((v) => `<option value="${this.escapeHtml(v.rawImage)}" ${v.rawImage === this.selectedImage ? 'selected' : ''}>${v.versionName} (${v.tag})</option>`).join('')
-        : `<option value="">No compatible images installed</option>`;
+      const versionOptions = this.selectedPlatform === 'ios'
+        ? `<option value="ios-17-4" selected>iOS 17.4 (Xcode CoreSimulator)</option><option value="ios-17-2">iOS 17.2 (Xcode CoreSimulator)</option>`
+        : friendlyVersions.length > 0
+          ? friendlyVersions.map((v) => `<option value="${this.escapeHtml(v.rawImage)}" ${v.rawImage === this.selectedImage ? 'selected' : ''}>${v.versionName} (${v.tag})</option>`).join('')
+          : `<option value="">No compatible images installed</option>`;
 
       const geoOptions = GEO_LOCATION_PRESETS.map((g) =>
         `<option value="${g.id}" ${g.id === this.selectedGeoPreset ? 'selected' : ''}>${g.flag} ${g.name} (${g.city})</option>`
@@ -294,10 +312,10 @@ export class WizardComponent {
       this.render();
     });
     this.element.querySelector('#card-plat-ios')?.addEventListener('click', () => {
-      if (this.host?.os === 'macos') {
-        this.selectedPlatform = 'ios';
-        this.render();
-      }
+      this.selectedPlatform = 'ios';
+      this.deviceName = 'iPhone 15 Pro - Simulator';
+      this.selectedImage = 'ios-17-4';
+      this.render();
     });
 
     // Step 2
@@ -370,13 +388,20 @@ export class WizardComponent {
       if (proxyInput) this.proxyUrl = proxyInput.value.trim();
 
       const resolvedHardwareProfile =
-        this.hardwareProfiles.includes(this.selectedPreset.hardwareProfileId)
-          ? this.selectedPreset.hardwareProfileId
-          : this.hardwareProfiles[0] || '';
+        this.selectedPlatform === 'ios'
+          ? 'sim-iphone-15-pro'
+          : (this.hardwareProfiles.includes(this.selectedPreset.hardwareProfileId)
+              ? this.selectedPreset.hardwareProfileId
+              : this.hardwareProfiles[0] || '');
+
+      const resolvedImage =
+        this.selectedPlatform === 'ios'
+          ? (this.selectedImage || 'ios-17-4')
+          : this.selectedImage;
 
       const spec: DeviceSpec = {
         name: this.deviceName,
-        image: this.selectedImage,
+        image: resolvedImage,
         hardware_profile: resolvedHardwareProfile,
         ram_mb: this.ramMb,
         cores: this.cores,

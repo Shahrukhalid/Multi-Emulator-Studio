@@ -48,13 +48,19 @@ impl DeviceSpec {
                 && s.bytes()
                     .all(|c| c.is_ascii_alphanumeric() || b"_-.".contains(&c))
         };
-        let image: Vec<_> = self.image.split(';').collect();
+        let is_ios = self.image.starts_with("ios-") || self.image.contains("CoreSimulator");
+        let valid_image = if is_ios {
+            safe(&self.image)
+        } else {
+            let image: Vec<_> = self.image.split(';').collect();
+            image.len() == 4
+                && image[0] == "system-images"
+                && image[1].starts_with("android-")
+                && image[1..].iter().all(|s| safe(s))
+        };
         if self.name.trim().is_empty()
             || self.name.len() > 128
-            || image.len() != 4
-            || image[0] != "system-images"
-            || !image[1].starts_with("android-")
-            || !image[1..].iter().all(|s| safe(s))
+            || !valid_image
             || !safe(&self.hardware_profile)
             || !safe(&self.locale)
             || !(1024..=32768).contains(&self.ram_mb)

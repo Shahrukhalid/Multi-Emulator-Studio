@@ -4,6 +4,7 @@ pub mod control;
 pub mod diagnostics;
 pub mod error;
 pub mod host;
+pub mod ios;
 pub mod managed_sdk;
 pub mod manager;
 pub mod model;
