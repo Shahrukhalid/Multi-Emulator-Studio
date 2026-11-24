@@ -101,6 +101,19 @@ export class PhoneViewer {
             <span class="rail-tooltip">Sensors</span>
           </button>
           <div class="rail-divider"></div>
+          <button class="rail-btn" data-action="crawl" title="Autonomous Robo UI Exploration Crawler" aria-label="Robo Crawl">
+            <span style="font-size: 14px;">🤖</span>
+            <span class="rail-tooltip">Robo Crawl</span>
+          </button>
+          <button class="rail-btn" data-action="camera" title="Mock Camera & QR/Barcode Pattern Injector" aria-label="Mock Camera">
+            <span style="font-size: 14px;">📷</span>
+            <span class="rail-tooltip">Camera & QR</span>
+          </button>
+          <button class="rail-btn" data-action="snapshot" title="Time-Machine Snapshots & State Checkpoints" aria-label="Snapshots">
+            <span style="font-size: 14px;">⏱</span>
+            <span class="rail-tooltip">Checkpoints</span>
+          </button>
+          <div class="rail-divider"></div>
           <button class="rail-btn" data-key="back" title="Back" aria-label="Back">◁</button>
           <button class="rail-btn" data-key="home" title="Home" aria-label="Home">○</button>
           <button class="rail-btn" data-key="recents" title="Recents" aria-label="Recents">□</button>
@@ -221,6 +234,15 @@ export class PhoneViewer {
     });
     this.element.querySelector('[data-action="sensors"]')?.addEventListener('click', () => {
       void this.showSensorsDialog();
+    });
+    this.element.querySelector('[data-action="crawl"]')?.addEventListener('click', () => {
+      void this.showRoboCrawlDialog();
+    });
+    this.element.querySelector('[data-action="camera"]')?.addEventListener('click', () => {
+      void this.showCameraDialog();
+    });
+    this.element.querySelector('[data-action="snapshot"]')?.addEventListener('click', () => {
+      void this.showSnapshotDialog();
     });
 
     // Logcat Drawer events
@@ -949,6 +971,135 @@ export class PhoneViewer {
       }
     } catch (err: unknown) {
       toast.show(`Sensor simulation error: ${(err as { message?: string }).message || String(err)}`, 'error');
+    }
+  }
+
+  private async showRoboCrawlDialog(): Promise<void> {
+    try {
+      const pkg = window.prompt(
+        `🤖 Autonomous Robo UI Exploration Crawler (${this.device.spec.name}):\n\n` +
+        `Enter target Android application package to crawl autonomously:`,
+        'com.android.settings'
+      );
+      if (!pkg || !pkg.trim()) return;
+
+      toast.show(`Launching Autonomous Robo Crawler on ${pkg.trim()}...`, 'info');
+      const report = await this.api.runRoboCrawl(this.device.id, {
+        package_name: pkg.trim(),
+        max_depth: 5,
+        max_actions: 20,
+        strategy: 'breadth_first',
+        throttle_ms: 300,
+        explore_inputs: true
+      });
+
+      const crashInfo = report.crashes.length > 0 ? ` ⚠️ ${report.crashes.length} crash(es) detected!` : ' No crashes detected.';
+      toast.show(
+        `Robo Crawl Finished (${report.status}): ${report.screens_discovered} screens discovered, ${report.actions_performed} UI actions executed.${crashInfo}`,
+        report.crashes.length > 0 ? 'error' : 'success'
+      );
+    } catch (err: unknown) {
+      toast.show(`Robo Crawl error: ${(err as { message?: string }).message || String(err)}`, 'error');
+    }
+  }
+
+  private async showCameraDialog(): Promise<void> {
+    try {
+      const patterns = await this.api.getCameraPatterns();
+      const list = patterns.map((p, i) => `${i + 1}. ${p.title} (${p.description})`).join('\n');
+
+      const choice = window.prompt(
+        `📷 Mock Camera Feed & QR/Barcode Pattern Injector (${this.device.spec.name}):\n\n` +
+        `${list}\n\n` +
+        `Enter pattern number (1-${patterns.length}):`,
+        '2'
+      );
+      if (!choice) return;
+
+      const idx = parseInt(choice.trim(), 10) - 1;
+      if (isNaN(idx) || idx < 0 || idx >= patterns.length) {
+        toast.show('Invalid pattern selection.', 'error');
+        return;
+      }
+
+      const selected = patterns[idx];
+      let payload = selected.default_payload;
+
+      if (selected.pattern === 'qr_code') {
+        const customUrl = window.prompt(`Enter URL or Text Payload to encode in QR pattern:`, payload);
+        if (customUrl !== null) payload = customUrl;
+      }
+
+      toast.show(`Injecting "${selected.title}" into camera gallery...`, 'info');
+      await this.api.injectCameraPattern(this.device.id, selected.pattern, 'back', payload);
+      toast.show(`Camera Pattern "${selected.title}" injected successfully! Available for scanner apps.`, 'success');
+    } catch (err: unknown) {
+      toast.show(`Camera injection error: ${(err as { message?: string }).message || String(err)}`, 'error');
+    }
+  }
+
+  private async showSnapshotDialog(): Promise<void> {
+    try {
+      const snapshots = await this.api.listSnapshots(this.device.id);
+
+      const listStr = snapshots.length > 0
+        ? snapshots.map((s, i) => `  [${i + 1}] "${s.name}" (${s.description}) - ${s.created_at}`).join('\n')
+        : '  (No snapshots saved yet)';
+
+      const action = window.prompt(
+        `⏱ Time-Machine Snapshots & State Checkpoints (${this.device.spec.name}):\n\n` +
+        `Saved Checkpoints:\n${listStr}\n\n` +
+        `Options:\n` +
+        `1. Quick-Save new State Checkpoint\n` +
+        `2. Quick-Restore / Rollback to Checkpoint\n` +
+        `3. Delete Checkpoint\n\n` +
+        `Enter option (1, 2, or 3):`,
+        '1'
+      );
+      if (!action) return;
+
+      if (action.trim() === '1') {
+        const name = window.prompt('Enter checkpoint name (e.g., "cart_populated", "after_login"):', `checkpoint_${Date.now()}`);
+        if (!name || !name.trim()) return;
+        const desc = window.prompt('Enter description for this checkpoint:', 'State saved during manual test verification');
+
+        toast.show(`Saving instant snapshot "${name.trim()}"...`, 'info');
+        const snap = await this.api.saveSnapshot(this.device.id, name.trim(), desc || undefined);
+        toast.show(`Snapshot "${snap.name}" checkpoint saved successfully!`, 'success');
+      } else if (action.trim() === '2') {
+        if (snapshots.length === 0) {
+          toast.show('No snapshots available to restore.', 'warning');
+          return;
+        }
+        const sChoice = window.prompt(`Select Checkpoint to Restore (1-${snapshots.length}):`, '1');
+        if (!sChoice) return;
+        const sIdx = parseInt(sChoice.trim(), 10) - 1;
+        if (isNaN(sIdx) || sIdx < 0 || sIdx >= snapshots.length) {
+          toast.show('Invalid snapshot selection.', 'error');
+          return;
+        }
+        const target = snapshots[sIdx];
+        toast.show(`Restoring device to snapshot "${target.name}"...`, 'info');
+        await this.api.loadSnapshot(this.device.id, target.name);
+        toast.show(`Device successfully rolled back to snapshot "${target.name}"!`, 'success');
+      } else if (action.trim() === '3') {
+        if (snapshots.length === 0) {
+          toast.show('No snapshots available to delete.', 'warning');
+          return;
+        }
+        const dChoice = window.prompt(`Select Checkpoint to Delete (1-${snapshots.length}):`, '1');
+        if (!dChoice) return;
+        const dIdx = parseInt(dChoice.trim(), 10) - 1;
+        if (isNaN(dIdx) || dIdx < 0 || dIdx >= snapshots.length) {
+          toast.show('Invalid selection.', 'error');
+          return;
+        }
+        const target = snapshots[dIdx];
+        await this.api.deleteSnapshot(this.device.id, target.id, target.name);
+        toast.show(`Deleted snapshot "${target.name}".`, 'info');
+      }
+    } catch (err: unknown) {
+      toast.show(`Snapshot operation error: ${(err as { message?: string }).message || String(err)}`, 'error');
     }
   }
 

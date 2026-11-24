@@ -1595,6 +1595,76 @@ impl Engine for Android {
         }
         Ok(())
     }
+    fn inject_camera_pattern(
+        &mut self,
+        d: &Device,
+        pattern: crate::camera::CameraPattern,
+        _facing: crate::camera::CameraFacing,
+        _payload: Option<&str>,
+    ) -> Result<()> {
+        let port = self.interactive_port(d)?;
+        let bytes = crate::camera::CameraEngine::generate_bmp_pattern(pattern, 1280, 720);
+        let temp_dir = std::env::temp_dir();
+        let local_path = temp_dir.join(format!("mock_camera_{}.bmp", d.id));
+        std::fs::write(&local_path, &bytes)?;
+
+        let target_remote = "/sdcard/DCIM/Camera/injected_test_pattern.bmp";
+        let _ = run(
+            self.adb_for(port)
+                .args(["push", &local_path.to_string_lossy(), target_remote]),
+            None,
+            Duration::from_secs(5),
+        );
+        let _ = std::fs::remove_file(&local_path);
+
+        let _ = run(
+            self.adb_for(port).args([
+                "shell",
+                "am",
+                "broadcast",
+                "-a",
+                "android.intent.action.MEDIA_SCANNER_SCAN_FILE",
+                "-d",
+                &format!("file://{target_remote}"),
+            ]),
+            None,
+            Duration::from_secs(3),
+        );
+        Ok(())
+    }
+    fn snapshot_save(&mut self, d: &Device, name: &str) -> Result<()> {
+        let port = self.interactive_port(d)?;
+        let sanitized = crate::snapshot::SnapshotManager::sanitize_name(name)?;
+        let _ = run(
+            self.adb_for(port)
+                .args(["emu", "avd", "snapshot", "save", &sanitized]),
+            None,
+            Duration::from_secs(10),
+        );
+        Ok(())
+    }
+    fn snapshot_load(&mut self, d: &Device, name: &str) -> Result<()> {
+        let port = self.interactive_port(d)?;
+        let sanitized = crate::snapshot::SnapshotManager::sanitize_name(name)?;
+        let _ = run(
+            self.adb_for(port)
+                .args(["emu", "avd", "snapshot", "load", &sanitized]),
+            None,
+            Duration::from_secs(10),
+        );
+        Ok(())
+    }
+    fn snapshot_delete(&mut self, d: &Device, name: &str) -> Result<()> {
+        let port = self.interactive_port(d)?;
+        let sanitized = crate::snapshot::SnapshotManager::sanitize_name(name)?;
+        let _ = run(
+            self.adb_for(port)
+                .args(["emu", "avd", "snapshot", "delete", &sanitized]),
+            None,
+            Duration::from_secs(5),
+        );
+        Ok(())
+    }
 }
 impl Drop for Android {
     fn drop(&mut self) {

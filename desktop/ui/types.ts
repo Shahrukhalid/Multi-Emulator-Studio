@@ -136,6 +136,13 @@ export type Request =
   | { action: 'set_battery_state'; id: string; state: BatteryState }
   | { action: 'set_sensor_state'; id: string; update: SensorUpdate }
   | { action: 'get_sensor_state'; id: string }
+  | { action: 'run_robo_crawl'; id: string; config?: CrawlConfig }
+  | { action: 'get_camera_patterns' }
+  | { action: 'inject_camera_pattern'; id: string; pattern: CameraPattern; facing: CameraFacing; payload?: string }
+  | { action: 'save_snapshot'; id: string; name: string; description?: string }
+  | { action: 'load_snapshot'; id: string; name: string }
+  | { action: 'list_snapshots'; id: string }
+  | { action: 'delete_snapshot'; id: string; snapshot_id: string; name: string }
   | { action: 'list' }
   | { action: 'tick' }
   | { action: 'network' }
@@ -633,6 +640,63 @@ export interface DeviceSensorState {
   gyroscope: [number, number, number];
   proximity_cm: number;
   light_lux: number;
+}
+
+export type CrawlStrategy = 'breadth_first' | 'depth_first' | 'random_walk';
+
+export interface CrawlConfig {
+  package_name: string;
+  max_depth: number;
+  max_actions: number;
+  strategy: CrawlStrategy;
+  throttle_ms: number;
+  explore_inputs: boolean;
+}
+
+export interface ScreenTransition {
+  step_index: number;
+  from_activity: string;
+  to_activity: string;
+  action: {
+    action: string;
+    element_id?: string;
+    x?: number;
+    y?: number;
+    text?: string;
+  };
+  duration_ms: number;
+}
+
+export interface RoboCrawlReport {
+  session_id: string;
+  device_id: string;
+  package_name: string;
+  duration_ms: number;
+  screens_discovered: number;
+  actions_performed: number;
+  transitions: ScreenTransition[];
+  crashes: ParsedCrash[];
+  status: string;
+}
+
+export type CameraFacing = 'back' | 'front';
+export type CameraPattern = 'color_bars' | 'qr_code' | 'barcode_128' | 'document_scan' | 'checkerboard';
+
+export interface CameraPatternInfo {
+  id: string;
+  pattern: CameraPattern;
+  title: string;
+  description: string;
+  default_payload: string;
+}
+
+export interface Snapshot {
+  id: string;
+  device_id: string;
+  name: string;
+  description: string;
+  created_at: string;
+  size_bytes?: number;
 }
 
 export function validateDeviceSpec(spec: DeviceSpec): string | null {

@@ -20,6 +20,7 @@ USAGE:
     multi-emulator-core preflight [DATA_DIR] [SDK_DIR]     Run headless virtualization diagnostics
     multi-emulator-core test <DATA_DIR> [OPTIONS]          Run headless automated test matrix
     multi-emulator-core macro <DATA_DIR> <MACRO_ID> [DEV]  Run headless gesture macro replay
+    multi-emulator-core crawl <DATA_DIR> <DEV> [PACKAGE]   Run autonomous Robo UI exploration crawl
     multi-emulator-core --probe [SDK_DIR]                  Legacy probe output
 
 TEST OPTIONS:
@@ -233,6 +234,52 @@ fn run_headless_macro(args: &[String]) -> Result<(), Box<dyn std::error::Error>>
     }
 }
 
+fn run_headless_crawl(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
+    if args.len() < 4 {
+        eprintln!("Error: 'crawl' requires <DATA_DIR> and <DEVICE_ID> [PACKAGE_NAME].");
+        print_usage();
+        std::process::exit(1);
+    }
+    let root = PathBuf::from(&args[2]);
+    let device_id: uuid::Uuid = args[3].parse()?;
+    let package_name = args
+        .get(4)
+        .cloned()
+        .unwrap_or_else(|| "com.android.settings".into());
+
+    let mut controller = Controller::open(&root, None)?;
+    println!(
+        "[Robo Crawler] Launching autonomous exploration on device {} for package '{}'...",
+        device_id, package_name
+    );
+
+    let config = multi_emulator_core::crawler::CrawlConfig {
+        package_name,
+        max_depth: 5,
+        max_actions: 25,
+        strategy: multi_emulator_core::crawler::CrawlStrategy::BreadthFirst,
+        throttle_ms: 300,
+        explore_inputs: true,
+    };
+
+    let res = controller.execute(Request::RunRoboCrawl {
+        id: device_id,
+        config: Some(config),
+    });
+
+    match res {
+        Ok(val) => {
+            println!("{}", serde_json::to_string_pretty(&val)?);
+            println!("[Robo Crawler] Autonomous exploration crawl completed successfully.");
+            Ok(())
+        }
+        Err(e) => {
+            eprintln!("[Robo Crawler] Crawl failed: {}", e.message);
+            std::process::exit(1);
+        }
+    }
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = std::env::args().collect();
     if args.len() < 2 {
@@ -267,6 +314,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         "macro" | "--macro" => {
             return run_headless_macro(&args);
+        }
+        "crawl" | "--crawl" => {
+            return run_headless_crawl(&args);
         }
         _ => {}
     }
