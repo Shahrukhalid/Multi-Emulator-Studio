@@ -10,7 +10,8 @@ impl Store {
         c.execute_batch(
             "PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;
             CREATE TABLE IF NOT EXISTS devices(id TEXT PRIMARY KEY, data TEXT NOT NULL);
-            CREATE TABLE IF NOT EXISTS config(key TEXT PRIMARY KEY, value TEXT NOT NULL);",
+            CREATE TABLE IF NOT EXISTS config(key TEXT PRIMARY KEY, value TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS macros(id TEXT PRIMARY KEY, data TEXT NOT NULL);",
         )?;
         Ok(Self(c))
     }
@@ -90,6 +91,53 @@ impl Store {
             .query_row("SELECT value FROM config WHERE key=?1", [key], |r| r.get(0))
             .optional()?)
     }
+    pub fn save_macro(&self, m: &crate::macro_runner::MacroDefinition) -> Result<()> {
+        self.0.execute(
+            "INSERT INTO macros VALUES(?1, ?2) ON CONFLICT(id) DO UPDATE SET data=excluded.data",
+            params![m.id.to_string(), serde_json::to_string(m)?],
+        )?;
+        Ok(())
+    }
+    pub fn list_macros(&self) -> Result<Vec<crate::macro_runner::MacroDefinition>> {
+        let mut stmt = self.0.prepare("SELECT data FROM macros ORDER BY id")?;
+        let rows = stmt.query_map([], |r| r.get::<_, String>(0))?;
+        let mut list = Vec::new();
+        for r in rows {
+            list.push(serde_json::from_str(&r?)?);
+        }
+        if list.is_empty() {
+            list = crate::macro_runner::MacroRunner::default_macros();
+            for m in &list {
+                let _ = self.save_macro(m);
+            }
+        }
+        Ok(list)
+    }
+    pub fn get_macro(&self, id: Uuid) -> Result<crate::macro_runner::MacroDefinition> {
+        let value: Option<String> = self
+            .0
+            .query_row(
+                "SELECT data FROM macros WHERE id=?1",
+                [id.to_string()],
+                |r| r.get(0),
+            )
+            .optional()?;
+        if let Some(val) = value {
+            return Ok(serde_json::from_str(&val)?);
+        }
+        if let Some(def) = crate::macro_runner::MacroRunner::default_macros()
+            .into_iter()
+            .find(|m| m.id == id)
+        {
+            return Ok(def);
+        }
+        Err(Error::Invalid("Macro definition not found".into()))
+    }
+    pub fn delete_macro(&self, id: Uuid) -> Result<()> {
+        self.0
+            .execute("DELETE FROM macros WHERE id=?1", [id.to_string()])?;
+        Ok(())
+    }
 }
 #[cfg(test)]
 mod tests {
@@ -135,5 +183,20 @@ mod tests {
         .unwrap();
         assert!(s.get(a.id).is_err());
         assert!(s.list().is_err());
+    }
+    #[test]
+    fn macro_persistence_roundtrip() {
+        let dir = tempfile::tempdir().unwrap();
+        let s = Store::open(&dir.path().join("test.db")).unwrap();
+        let macros = s.list_macros().unwrap();
+        assert!(!macros.is_empty());
+        let mut sample_macro = macros[0].clone();
+        sample_macro.name = "Custom Renamed Macro".into();
+        s.save_macro(&sample_macro).unwrap();
+        assert_eq!(
+            s.get_macro(sample_macro.id).unwrap().name,
+            "Custom Renamed Macro"
+        );
+        s.delete_macro(sample_macro.id).unwrap();
     }
 }

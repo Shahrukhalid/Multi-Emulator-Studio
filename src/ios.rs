@@ -1,5 +1,5 @@
 use crate::model::{Device, DeviceState, Status};
-use crate::runtime::{Engine, ScreenFrame};
+use crate::runtime::{Engine, NavigationKey, ScreenFrame, TouchInput};
 use crate::{Error, Result};
 use base64::Engine as _;
 use serde::{Deserialize, Serialize};
@@ -424,6 +424,30 @@ impl Engine for IosEngine {
         } else {
             Err(Error::Unavailable("Simulator is not booted".into()))
         }
+    }
+
+    fn input_text(&mut self, _d: &Device, _text: &str) -> Result<()> {
+        Ok(())
+    }
+
+    fn input_key(&mut self, _d: &Device, _keycode: u32) -> Result<()> {
+        Ok(())
+    }
+
+    fn set_clipboard(&mut self, _d: &Device, _text: &str) -> Result<()> {
+        Ok(())
+    }
+
+    fn get_clipboard(&mut self, _d: &Device) -> Result<String> {
+        Ok(String::new())
+    }
+
+    fn navigate(&mut self, _d: &Device, _key: NavigationKey) -> Result<()> {
+        Ok(())
+    }
+
+    fn touch(&mut self, _d: &Device, _input: TouchInput) -> Result<()> {
+        Ok(())
     }
 }
 

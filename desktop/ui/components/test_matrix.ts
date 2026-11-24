@@ -13,6 +13,7 @@ export interface TestMatrixCallbacks {
   onBroadcastApk?: () => void;
   onCaptureSynchronized?: () => void;
   onExportReport?: () => void;
+  onRunMacro?: () => void;
 }
 
 export class TestMatrixComponent {
@@ -128,6 +129,10 @@ export class TestMatrixComponent {
           <button class="filter-pill" id="btn-export-matrix-report" title="Export complete self-contained HTML test report" style="display: inline-flex; align-items: center; gap: 5px; height: 32px; padding: 0 10px; cursor: pointer;">
             ${Icons.external}
             <span>Export Report</span>
+          </button>
+          <button class="filter-pill" id="btn-run-fleet-macro" title="Execute a recorded or template Gesture Macro across all devices in parallel" style="display: inline-flex; align-items: center; gap: 5px; height: 32px; padding: 0 10px; cursor: pointer;">
+            <span style="color: #3b82f6; font-size: 13px;">▶</span>
+            <span>Run Macro Fleet</span>
           </button>
 
           <button class="btn-create-primary" id="btn-run-matrix-tests" ${this.isRunning ? 'disabled style="opacity:0.7;"' : ''}>
@@ -294,6 +299,9 @@ export class TestMatrixComponent {
     // Export report button
     this.element.querySelector('#btn-export-matrix-report')?.addEventListener('click', () => {
       this.callbacks.onExportReport?.();
+    });
+    this.element.querySelector('#btn-run-fleet-macro')?.addEventListener('click', () => {
+      this.callbacks.onRunMacro?.();
     });
 
     // Dismiss broadcast banner button

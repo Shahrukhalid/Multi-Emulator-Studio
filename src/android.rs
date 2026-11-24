@@ -1416,6 +1416,36 @@ impl Engine for Android {
         }
         Ok(())
     }
+    fn input_key(&mut self, d: &Device, keycode: u32) -> Result<()> {
+        let port = self.interactive_port(d)?;
+        run(
+            self.adb_for(port)
+                .args(["shell", "input", "keyevent", &keycode.to_string()]),
+            None,
+            Duration::from_secs(3),
+        )?;
+        Ok(())
+    }
+    fn set_clipboard(&mut self, d: &Device, text: &str) -> Result<()> {
+        let port = self.interactive_port(d)?;
+        let escaped = text.replace('"', "\\\"");
+        let _ = run(
+            self.adb_for(port)
+                .args(["shell", "cmd", "clipboard", "set-text", &escaped]),
+            None,
+            Duration::from_secs(3),
+        );
+        Ok(())
+    }
+    fn get_clipboard(&mut self, d: &Device) -> Result<String> {
+        let port = self.interactive_port(d)?;
+        run(
+            self.adb_for(port)
+                .args(["shell", "cmd", "clipboard", "get-text"]),
+            None,
+            Duration::from_secs(3),
+        )
+    }
 }
 impl Drop for Android {
     fn drop(&mut self) {

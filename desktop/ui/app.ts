@@ -23,6 +23,7 @@ import { LocationModalComponent } from './components/location_modal.js';
 import { DownloadsComponent } from './components/downloads.js';
 import { TestMatrixComponent } from './components/test_matrix.js';
 import { DeviceDetailsComponent } from './components/device_details.js';
+import { HealthHubComponent } from './components/health_hub.js';
 import { toast } from './toast.js';
 
 export class App {
@@ -35,6 +36,7 @@ export class App {
   private templates: TemplatesComponent;
   private downloads: DownloadsComponent;
   private testMatrix: TestMatrixComponent;
+  private healthHub: HealthHubComponent;
   private settings: SettingsComponent;
 
   private activeTab: MainNavTab = 'devices';
@@ -189,8 +191,35 @@ export class App {
         } catch (e: any) {
           toast.show(`Export report failed: ${e?.message || e}`, 'error');
         }
+      },
+      onRunMacro: async () => {
+        try {
+          const macros = await this.api.listMacros();
+          if (macros.length === 0) {
+            toast.show('No macros available.', 'warning');
+            return;
+          }
+          const options = macros.map((m, i) => `${i + 1}. ${m.name} (${m.steps.length} steps)`).join('\n');
+          const choice = window.prompt(`Select Macro to Execute Across Active Device Fleet:\n\n${options}\n\nEnter number (1-${macros.length}):`, '1');
+          if (!choice) return;
+          const idx = parseInt(choice.trim(), 10) - 1;
+          if (isNaN(idx) || idx < 0 || idx >= macros.length) {
+            toast.show('Invalid macro selection.', 'error');
+            return;
+          }
+          const selected = macros[idx];
+          toast.show(`Executing "${selected.name}" across device fleet in parallel...`, 'info');
+          const results = await this.api.runMacroFleet(selected.id);
+          const passed = results.filter(r => r.status === 'passed').length;
+          toast.show(`Fleet Macro Execution: ${passed}/${results.length} devices passed successfully!`, passed === results.length ? 'success' : 'warning');
+        } catch (e: any) {
+          toast.show(`Fleet macro run failed: ${e?.message || e}`, 'error');
+        }
       }
     });
+
+    // Health Hub initialization
+    this.healthHub = new HealthHubComponent(this.api);
 
     // Settings view initialization
     this.settings = new SettingsComponent(
@@ -419,6 +448,9 @@ export class App {
       container.appendChild(this.downloads.getElement());
     } else if (tab === 'matrix') {
       container.appendChild(this.testMatrix.getElement());
+    } else if (tab === 'health') {
+      container.appendChild(this.healthHub.getElement());
+      void this.healthHub.refresh();
     } else if (tab === 'settings') {
       container.appendChild(this.settings.getElement());
     }

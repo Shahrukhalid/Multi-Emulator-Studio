@@ -1954,3 +1954,316 @@ body { background-image: radial-gradient(ellipse at 75% 0%, var(--studio-glow), 
   font-size: 10px;
   color: var(--text-tertiary);
 }
+
+/* ==========================================================================
+   Phase 8: Preflight Health Hub Styles
+   ========================================================================== */
+
+.health-hub-view {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
+}
+
+.health-hub-section {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.health-summary-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px;
+  background: var(--bg-surface-elevated, #1e293b);
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
+  border-radius: 12px;
+  gap: 24px;
+}
+
+.summary-left {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.summary-status-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.summary-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.health-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.health-badge.status-pass {
+  background: rgba(16, 185, 129, 0.15);
+  color: #10b981;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.health-badge.status-warn {
+  background: rgba(245, 158, 11, 0.15);
+  color: #f59e0b;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.health-badge.status-fail {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.summary-description {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  margin: 0;
+}
+
+.summary-stats-grid {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.summary-stat-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 72px;
+  padding: 10px 14px;
+  background: rgba(16, 185, 129, 0.08);
+  border: 1px solid rgba(16, 185, 129, 0.2);
+  border-radius: 8px;
+}
+
+.summary-stat-box.warn {
+  background: rgba(245, 158, 11, 0.08);
+  border-color: rgba(245, 158, 11, 0.2);
+}
+
+.summary-stat-box.fail {
+  background: rgba(239, 68, 68, 0.08);
+  border-color: rgba(239, 68, 68, 0.2);
+}
+
+.summary-stat-box .stat-number {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.summary-stat-box .stat-label {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.host-specs-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.spec-pill {
+  padding: 4px 10px;
+  background: var(--bg-surface, #0f172a);
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.health-category-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  border-bottom: 1px solid var(--border-subtle);
+  padding-bottom: 12px;
+}
+
+.health-tab-btn {
+  background: none;
+  border: 1px solid transparent;
+  color: var(--text-secondary);
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.health-tab-btn:hover {
+  background: var(--bg-surface-elevated);
+  color: var(--text-primary);
+}
+
+.health-tab-btn.active {
+  background: var(--color-primary-subtle, rgba(37, 99, 235, 0.15));
+  border-color: var(--color-primary, #2563eb);
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.health-cards-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.health-check-card {
+  padding: 16px 20px;
+  background: var(--bg-surface, #0f172a);
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: border-color 0.2s ease;
+}
+
+.health-check-card.pass {
+  border-left: 4px solid #10b981;
+}
+
+.health-check-card.warn {
+  border-left: 4px solid #f59e0b;
+}
+
+.health-check-card.fail {
+  border-left: 4px solid #ef4444;
+}
+
+.check-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.check-card-title-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.check-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.check-status-dot.pass { background: #10b981; }
+.check-status-dot.warn { background: #f59e0b; }
+.check-status-dot.fail { background: #ef4444; }
+
+.check-title {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0;
+  color: var(--text-primary);
+}
+
+.check-status-tag {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  letter-spacing: 0.5px;
+}
+
+.check-status-tag.pass { background: rgba(16, 185, 129, 0.15); color: #10b981; }
+.check-status-tag.warn { background: rgba(245, 158, 11, 0.15); color: #f59e0b; }
+.check-status-tag.fail { background: rgba(239, 68, 68, 0.15); color: #ef4444; }
+
+.check-summary {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.check-details-box {
+  margin: 4px 0 0;
+  padding: 8px 12px;
+  background: var(--bg-surface-elevated, #1e293b);
+  border-radius: 6px;
+  font-family: monospace;
+  font-size: 11px;
+  color: var(--text-tertiary);
+  white-space: pre-wrap;
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+.check-remediation-box {
+  margin-top: 6px;
+  padding: 10px 14px;
+  background: rgba(245, 158, 11, 0.06);
+  border: 1px dashed rgba(245, 158, 11, 0.3);
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.remediation-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.remediation-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #f59e0b;
+}
+
+.btn-copy-remediation {
+  background: none;
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  color: #f59e0b;
+  font-size: 11px;
+  border-radius: 4px;
+  padding: 2px 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.btn-copy-remediation:hover {
+  background: rgba(245, 158, 11, 0.15);
+}
+
+.remediation-code {
+  font-family: monospace;
+  font-size: 12px;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+}
+
+/* Tool Rail Active State */
+.rail-btn.active {
+  background: var(--color-primary-subtle, rgba(37, 99, 235, 0.2));
+  border-color: var(--color-primary, #2563eb);
+  color: #3b82f6 !important;
+}
+

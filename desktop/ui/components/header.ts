@@ -1,6 +1,6 @@
 import { Icons } from '../icons.js';
 
-export type MainNavTab = 'devices' | 'templates' | 'downloads' | 'matrix' | 'settings';
+export type MainNavTab = 'devices' | 'templates' | 'downloads' | 'matrix' | 'health' | 'settings';
 
 export interface HeaderProps {
   activeTab: MainNavTab;
@@ -73,6 +73,10 @@ export class HeaderComponent {
           <button class="nav-item ${this.props.activeTab === 'matrix' ? 'active' : ''}" data-tab="matrix">
             ${Icons.matrix}
             <span>Test Matrix</span>
+          </button>
+          <button class="nav-item ${this.props.activeTab === 'health' ? 'active' : ''}" data-tab="health">
+            ${Icons.shield}
+            <span>Health Hub</span>
           </button>
           <button class="nav-item ${this.props.activeTab === 'settings' ? 'active' : ''}" data-tab="settings">
             ${Icons.settings}
