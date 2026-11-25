@@ -87,13 +87,13 @@ DeviceSpec: name, image, hardware_profile, ram_mb, cores, width, height, disk_mb
 - Guest network observations require boot; duplicate private addresses may be normal on separate NAT networks. Public IP uniqueness and MAC customization not promised; no network observations from this run.
 - Windows x64 compile and hardware acceleration tests, security audit and third-party notices remain required. No signing, notarization, billing, telemetry or commercial licensing implemented.
 
-## Production GUI instructions for Antigravity
+## Production GUI architecture requirements
 
 Start from milestone/m2-verification after checks and real-runtime blockers are resolved. Preserve Rust Engine, typed dispatcher, database and controller lock. Build polished device grid/list, create wizard, SDK onboarding and explicit license handling, lifecycle/health indicators, budget and queue view, APK picker, local logs and network limitations. Native pickers and deletion confirmations; never expose arbitrary shell or ADB commands. Show unavailable/error/queued/unknown states truthfully. Keep licensing separate, do not bundle restricted images or upload device data, preserve copyright and third-party notices, and avoid contributor trailers/branding. Verify actual backend calls and both platforms before release.
 
-## Antigravity Commercial UI Implementation (2026-11-19)
+## Commercial UI Implementation (2026-11-19)
 
-Completed full commercial UI redesign on branch `feature/antigravity-ui` based on `milestone/m2-verification` commit `24798b3`.
+Completed full commercial UI redesign on branch `feature/commercial-ui` based on `milestone/m2-verification` commit `24798b3`.
 
 - **Navigation**: Clean 3-tab layout containing only **My Devices**, **Templates**, and **Settings**, plus a prominent **+ Create Device** button. All developer-centric panels (raw IP/MAC metrics, ADB ports, webview diagnostics) removed from primary navigation and safely consolidated inside **Developer Mode** in Settings.
 - **Visual Design**: High-fidelity native desktop styling (macOS HIG / Windows Fluent inspired) with light and dark theme support, custom vector device illustrations (Standard Phone, Large Phone, Tablet, Foldable, iOS Simulator, Welcome Hero), restrained accent styling, and zero generic dashboards.

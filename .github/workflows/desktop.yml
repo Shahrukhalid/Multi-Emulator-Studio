@@ -59,6 +59,7 @@ jobs:
       - run: node --test managed-setup-flow.test.mjs
       - run: node --test candidate-manifest.test.mjs release-readiness.test.mjs
       - run: node --test video-annexb.test.mjs
+      - run: node --test ui-regression.test.mjs
       - run: cargo +stable fmt --check
       - run: cargo +stable clippy --locked --all-targets -- -D warnings
       - run: cargo +stable test --locked
