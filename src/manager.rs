@@ -492,11 +492,15 @@ impl<E: Engine> Manager<E> {
         let crashes = crate::diagnostics::CrashAnalyzer::parse_logcat(&logcat);
 
         let (cpu, ram_used, ram_total, fps) = match status.state {
-            crate::model::DeviceState::Ready => {
-                let ram_total = device.spec.ram_mb;
-                let ram_used = (ram_total as f32 * 0.42) as u32;
-                (14.2f32, ram_used, ram_total, 60)
-            }
+            crate::model::DeviceState::Ready => match self.engine.get_performance_sample(&device) {
+                Ok(sample) => (
+                    sample.cpu_percent,
+                    sample.ram_used_mb as u32,
+                    sample.ram_total_mb as u32,
+                    sample.fps.round() as u32,
+                ),
+                Err(_) => (0.0f32, 0, device.spec.ram_mb, 0),
+            },
             _ => (0.0f32, 0, device.spec.ram_mb, 0),
         };
 

@@ -40,14 +40,15 @@ export class HealthHubComponent {
 
   private render(): void {
     const report = this.report;
-    const overall = report?.overall || 'pass';
+    const overall = report?.overall || 'warn';
 
-    const overallBadge =
-      overall === 'pass'
-        ? `<span class="health-badge status-pass">${Icons.check} All Systems Operational</span>`
-        : overall === 'warn'
-        ? `<span class="health-badge status-warn">${Icons.warning} System Actions Recommended</span>`
-        : `<span class="health-badge status-fail">${Icons.delete} Critical Attention Required</span>`;
+    const overallBadge = !report
+      ? `<span class="health-badge status-warn">${Icons.rotate} Running Preflight Scan…</span>`
+      : overall === 'pass'
+      ? `<span class="health-badge status-pass">${Icons.check} All Systems Operational</span>`
+      : overall === 'warn'
+      ? `<span class="health-badge status-warn">${Icons.warning} System Actions Recommended</span>`
+      : `<span class="health-badge status-fail">${Icons.delete} Critical Attention Required</span>`;
 
     const checks = this.filterChecks();
 
@@ -65,7 +66,7 @@ export class HealthHubComponent {
               </div>
             </div>
             <div class="header-actions">
-              <button class="btn-tool-secondary" id="btn-health-refresh" ${this.loading ? 'disabled' : ''}>
+              <button class="btn-secondary-action" id="btn-health-refresh" ${this.loading ? 'disabled' : ''}>
                 ${Icons.rotate}
                 <span>${this.loading ? 'Scanning...' : 'Re-run Diagnostics'}</span>
               </button>

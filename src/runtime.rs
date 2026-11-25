@@ -265,10 +265,14 @@ pub trait Engine {
             "File transfer to device is unavailable".into(),
         ))
     }
-    fn get_performance_sample(&mut self, d: &Device) -> Result<crate::profiler::PerformanceSample> {
-        Ok(crate::profiler::ProfilerEngine::create_mock_sample(
-            &d.id.to_string(),
-            d.spec.ram_mb as u64,
+    fn dump_ui_hierarchy(&mut self, _: &Device) -> Result<String> {
+        Err(crate::Error::Unavailable(
+            "UI hierarchy inspection is unavailable".into(),
+        ))
+    }
+    fn get_performance_sample(&mut self, _: &Device) -> Result<crate::profiler::PerformanceSample> {
+        Err(crate::Error::Unavailable(
+            "Live performance telemetry is unavailable".into(),
         ))
     }
     fn dispatch_deep_link(
@@ -309,8 +313,10 @@ pub trait Engine {
     fn list_devtools_targets(
         &mut self,
         _: &Device,
-        local_port: u16,
+        _local_port: u16,
     ) -> Result<Vec<crate::devtools::DevToolsTarget>> {
-        Ok(crate::devtools::DevToolsBridge::mock_targets(local_port))
+        Err(crate::Error::Unavailable(
+            "DevTools target discovery is unavailable".into(),
+        ))
     }
 }

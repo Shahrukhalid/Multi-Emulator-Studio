@@ -1,4 +1,5 @@
 import {
+  Device,
   DeviceSpec,
   DEVICE_PRESETS,
   DevicePreset,
@@ -12,7 +13,8 @@ import { Illustrations } from '../illustrations.js';
 import { Icons } from '../icons.js';
 
 export interface WizardCallbacks {
-  onCreate: (spec: DeviceSpec, autoLaunch: boolean) => Promise<void>;
+  onCreate: (spec: DeviceSpec, autoLaunch: boolean) => Promise<Device | void>;
+  onStartCreated?: (device: Device) => void;
   onClose: () => void;
 }
 
@@ -37,6 +39,7 @@ export class WizardComponent {
   private diskMb = 8192;
   private selectedGeoPreset = GEO_LOCATION_PRESETS[0].id;
   private proxyUrl = '';
+  private lastCreatedDevice: Device | null = null;
 
   constructor(
     installedImages: string[],
@@ -51,6 +54,13 @@ export class WizardComponent {
     this.callbacks = callbacks;
     if (initialPreset) {
       this.selectedPreset = initialPreset;
+      this.selectedFormFactor = initialPreset.formFactor === 'tablet'
+        ? 'tablet'
+        : initialPreset.formFactor === 'foldable'
+        ? 'foldable'
+        : 'phone';
+      this.ramMb = initialPreset.recommendedRamMb;
+      this.cores = initialPreset.recommendedCores;
       this.deviceName = initialPreset.name;
     }
 
@@ -210,7 +220,7 @@ export class WizardComponent {
           : `<option value="">No compatible images installed</option>`;
 
       const geoOptions = GEO_LOCATION_PRESETS.map((g) =>
-        `<option value="${g.id}" ${g.id === this.selectedGeoPreset ? 'selected' : ''}>${g.flag} ${g.name} (${g.city})</option>`
+        `<option value="${g.id}" ${g.id === this.selectedGeoPreset ? 'selected' : ''}>${g.flag} ${g.name}</option>`
       ).join('');
 
       return `
@@ -224,6 +234,7 @@ export class WizardComponent {
             <div>
               <label class="form-helper-text" for="wiz-ram-select">RAM Memory</label>
               <select class="form-select-input" id="wiz-ram-select">
+                <option value="2048" ${this.ramMb === 2048 ? 'selected' : ''}>2 GB (Lightweight)</option>
                 <option value="4096" ${this.ramMb === 4096 ? 'selected' : ''}>4 GB</option>
                 <option value="6144" ${this.ramMb === 6144 ? 'selected' : ''}>6 GB (Recommended)</option>
                 <option value="8192" ${this.ramMb === 8192 ? 'selected' : ''}>8 GB (High Performance)</option>
@@ -242,7 +253,7 @@ export class WizardComponent {
             </select>
           </div>
 
-          <button type="button" class="btn-toggle-accordion" id="btn-toggle-advanced">
+          <button type="button" class="accordion-toggle" id="btn-toggle-advanced">
             ${this.showAdvanced ? '− Hide Advanced & Network Settings' : '+ Show Advanced & Network Settings'}
           </button>
 
@@ -282,13 +293,13 @@ export class WizardComponent {
     }
     if (this.currentStep === 2 || this.currentStep === 3) {
       return `
-        <button type="button" class="nav-item" id="btn-step-back">← Back</button>
+        <button type="button" class="btn-secondary-action" id="btn-step-back">← Back</button>
         <button type="button" class="btn-create-primary" id="btn-step-next"><span>Next →</span></button>
       `;
     }
     if (this.currentStep === 4) {
       return `
-        <button type="button" class="nav-item" id="btn-step-back">← Back</button>
+        <button type="button" class="btn-secondary-action" id="btn-step-back">← Back</button>
         <button type="button" class="btn-create-primary" id="btn-step-create" ${this.isSubmitting ? 'disabled' : ''}>
           <span>${this.isSubmitting ? 'Creating...' : 'Create Device'}</span>
         </button>
@@ -296,7 +307,7 @@ export class WizardComponent {
     }
     // Step 5
     return `
-      <button type="button" class="nav-item" id="btn-step-another">Create Another</button>
+      <button type="button" class="btn-secondary-action" id="btn-step-another">Create Another</button>
       <button type="button" class="btn-create-primary" id="btn-step-start"><span>Start Device</span></button>
     `;
   }
@@ -339,6 +350,29 @@ export class WizardComponent {
         if (found) {
           this.selectedPreset = found;
           this.deviceName = found.name;
+          this.ramMb = found.recommendedRamMb;
+          this.cores = found.recommendedCores;
+          this.render();
+          return;
+        }
+        const iosMap: Record<string, { name: string; width: number; height: number; ram: number; profile: string }> = {
+          'ios-iphone-15-pro': { name: 'iPhone 15 Pro', width: 1179, height: 2556, ram: 8192, profile: 'iphone_15_pro' },
+          'ios-iphone-15': { name: 'iPhone 15', width: 1179, height: 2556, ram: 6144, profile: 'iphone_15' },
+          'ios-ipad-air': { name: 'iPad Air (5th gen)', width: 1640, height: 2360, ram: 8192, profile: 'ipad_air' }
+        };
+        const iosSpec = id ? iosMap[id] : undefined;
+        if (iosSpec) {
+          this.selectedPreset = {
+            ...this.selectedPreset,
+            id: id!,
+            name: iosSpec.name,
+            width: iosSpec.width,
+            height: iosSpec.height,
+            recommendedRamMb: iosSpec.ram,
+            hardwareProfileId: iosSpec.profile
+          };
+          this.deviceName = iosSpec.name;
+          this.ramMb = iosSpec.ram;
           this.render();
         }
       });
@@ -427,7 +461,8 @@ export class WizardComponent {
       if (btn) btn.disabled = true;
 
       try {
-        await this.callbacks.onCreate(spec, false);
+        const created = await this.callbacks.onCreate(spec, false);
+        this.lastCreatedDevice = created || null;
         this.isSubmitting = false;
         this.currentStep = 5;
         this.render();
@@ -442,12 +477,24 @@ export class WizardComponent {
     // Step 5 actions
     this.element.querySelector('#btn-step-another')?.addEventListener('click', () => {
       this.currentStep = 1;
+      this.selectedPlatform = 'android';
+      this.selectedFormFactor = 'phone';
+      this.selectedPreset = DEVICE_PRESETS[0];
+      this.selectedImage = this.installedImages[0] || '';
+      this.ramMb = 6144;
+      this.cores = 4;
+      this.diskMb = 8192;
+      this.lastCreatedDevice = null;
       this.deviceName = 'Pixel 8 Pro - Test';
       this.render();
     });
 
     this.element.querySelector('#btn-step-start')?.addEventListener('click', () => {
-      close();
+      if (this.lastCreatedDevice && this.callbacks.onStartCreated) {
+        this.callbacks.onStartCreated(this.lastCreatedDevice);
+      } else {
+        close();
+      }
     });
   }
 

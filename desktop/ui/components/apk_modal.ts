@@ -50,7 +50,7 @@ export class ApkModalComponent {
           <div class="form-block">
             <label class="form-label-title" for="apk-file-path">Local APK Path</label>
             <input class="form-text-input" id="apk-file-path" placeholder="C:\\path\\to\\app.apk" />
-            <button type="button" class="nav-item" id="btn-apk-browse">Browse APK…</button>
+            <button type="button" class="btn-secondary-action" id="btn-apk-browse">Browse APK…</button>
             <span class="form-helper-text">Enter the absolute path to a valid Android package file.</span>
           </div>
 
@@ -61,7 +61,7 @@ export class ApkModalComponent {
         </div>
 
         <div class="modal-actions">
-          <button type="button" class="nav-item" id="btn-apk-cancel" style="padding: 8px 16px;">Cancel</button>
+          <button type="button" class="btn-secondary-action" id="btn-apk-cancel">Cancel</button>
           <button type="button" class="btn-create-primary" id="btn-apk-submit" ${!isRunning ? 'disabled' : ''}>
             <span>Install APK</span>
           </button>

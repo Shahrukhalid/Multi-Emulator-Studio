@@ -164,38 +164,88 @@ impl RoboCrawler {
         discovered_activities.insert("MainActivity".to_string());
 
         // Launch target application
-        let _ = engine.launch_app(device, &config.package_name);
+        engine.launch_app(device, &config.package_name)?;
         std::thread::sleep(std::time::Duration::from_millis(config.throttle_ms));
 
         let mut actions_count = 0;
         let mut current_activity = format!("{}.MainActivity", config.package_name);
+        let mut visited_elements = std::collections::HashSet::new();
+        let mut screen_idx = 0usize;
 
         for step in 0..config.max_actions {
             if start_time.elapsed().as_secs() > 60 {
                 break;
             }
 
-            let action = match step % 4 {
-                0 => CrawlAction::Tap {
-                    element_id: format!("btn_step_{step}"),
-                    x: 540,
-                    y: 1000 + ((step as u32 * 50) % 600),
-                },
-                1 => CrawlAction::ScrollDown,
-                2 if config.explore_inputs => CrawlAction::InputText {
-                    element_id: format!("input_step_{step}"),
-                    text: format!("test_auto_{step}"),
-                },
-                _ => CrawlAction::NavigateBack,
+            let xml = engine.dump_ui_hierarchy(device).unwrap_or_default();
+            let elements = Self::parse_hierarchy(&xml);
+            let candidates: Vec<&UiElement> = elements
+                .iter()
+                .filter(|el| el.clickable || el.focusable || el.scrollable)
+                .collect();
+
+            let action = if !candidates.is_empty() {
+                let target = match config.strategy {
+                    CrawlStrategy::DepthFirst => candidates
+                        .iter()
+                        .rev()
+                        .find(|el| !visited_elements.contains(&el.id))
+                        .copied()
+                        .unwrap_or_else(|| candidates[candidates.len() - 1]),
+                    CrawlStrategy::RandomWalk => {
+                        let pick = (step.wrapping_mul(7).wrapping_add(3)) % candidates.len();
+                        candidates[pick]
+                    }
+                    CrawlStrategy::BreadthFirst => candidates
+                        .iter()
+                        .find(|el| !visited_elements.contains(&el.id))
+                        .copied()
+                        .unwrap_or_else(|| candidates[step % candidates.len()]),
+                };
+                visited_elements.insert(target.id.clone());
+
+                if config.explore_inputs
+                    && target.class_name.contains("EditText")
+                    && !visited_elements.contains(&format!("input:{}", target.id))
+                {
+                    visited_elements.insert(format!("input:{}", target.id));
+                    CrawlAction::InputText {
+                        element_id: target.id.clone(),
+                        text: format!("test_auto_{step}"),
+                    }
+                } else if target.scrollable && step % 3 == 2 {
+                    CrawlAction::ScrollDown
+                } else {
+                    let (x, y, w, h) = target.bounds;
+                    CrawlAction::Tap {
+                        element_id: target.id.clone(),
+                        x: x + w / 2,
+                        y: y + h / 2,
+                    }
+                }
+            } else {
+                match step % 4 {
+                    0 => CrawlAction::Tap {
+                        element_id: format!("fallback_tap_{step}"),
+                        x: 540,
+                        y: 1000 + ((step as u32 * 50) % 600),
+                    },
+                    1 => CrawlAction::ScrollDown,
+                    2 if config.explore_inputs => CrawlAction::InputText {
+                        element_id: format!("fallback_input_{step}"),
+                        text: format!("test_auto_{step}"),
+                    },
+                    _ => CrawlAction::NavigateBack,
+                }
             };
 
             let step_start = Instant::now();
             match &action {
                 CrawlAction::Tap { x, y, .. } => {
-                    let _ = engine.touch(device, TouchInput::Tap { x: *x, y: *y });
+                    engine.touch(device, TouchInput::Tap { x: *x, y: *y })?;
                 }
                 CrawlAction::ScrollDown => {
-                    let _ = engine.touch(
+                    engine.touch(
                         device,
                         TouchInput::Swipe {
                             x: 500,
@@ -203,21 +253,34 @@ impl RoboCrawler {
                             end_x: 500,
                             end_y: 500,
                         },
-                    );
+                    )?;
                 }
                 CrawlAction::InputText { text, .. } => {
-                    let _ = engine.input_text(device, text);
+                    engine.input_text(device, text)?;
                 }
                 CrawlAction::NavigateBack => {
-                    let _ = engine.navigate(device, NavigationKey::Back);
+                    engine.navigate(device, NavigationKey::Back)?;
                 }
             }
 
             actions_count += 1;
             std::thread::sleep(std::time::Duration::from_millis(config.throttle_ms));
 
-            let next_activity = if step % 3 == 0 {
-                format!("{}.SubViewActivity_{}", config.package_name, step / 3)
+            let next_activity = if !xml.is_empty() {
+                let signature: usize = elements.iter().take(6).map(|e| e.id.len()).sum();
+                let label = format!(
+                    "{}.Screen_{}_{}",
+                    config.package_name,
+                    elements.len(),
+                    signature
+                );
+                if label != current_activity {
+                    screen_idx += 1;
+                }
+                label
+            } else if step % 3 == 0 {
+                screen_idx += 1;
+                format!("{}.View_{screen_idx}", config.package_name)
             } else {
                 current_activity.clone()
             };

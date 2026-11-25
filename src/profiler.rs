@@ -122,6 +122,176 @@ impl ProfilerEngine {
         csv
     }
 
+    /// Parses `/proc/meminfo` (and optional `dumpsys meminfo`) into
+    /// `(ram_used_mb, ram_total_mb, dalvik_mb, native_mb, graphics_mb)`.
+    pub fn parse_meminfo(output: &str, fallback_total_mb: u64) -> (u64, u64, u64, u64, u64) {
+        let mut total_kb: Option<u64> = None;
+        let mut avail_kb: Option<u64> = None;
+        let mut free_kb: Option<u64> = None;
+        let mut buffers_kb: u64 = 0;
+        let mut cached_kb: u64 = 0;
+        let mut used_ram_kb: Option<u64> = None;
+        let mut dalvik_kb: u64 = 0;
+        let mut native_kb: u64 = 0;
+        let mut graphics_kb: u64 = 0;
+
+        let parse_first_kb = |s: &str| -> Option<u64> {
+            let digits: String = s
+                .chars()
+                .skip_while(|c| !c.is_ascii_digit())
+                .take_while(|c| c.is_ascii_digit() || *c == ',')
+                .filter(|c| *c != ',')
+                .collect();
+            digits.parse::<u64>().ok()
+        };
+
+        for line in output.lines() {
+            let trimmed = line.trim();
+            if let Some(rest) = trimmed.strip_prefix("MemTotal:") {
+                total_kb = parse_first_kb(rest);
+            } else if let Some(rest) = trimmed.strip_prefix("MemAvailable:") {
+                avail_kb = parse_first_kb(rest);
+            } else if let Some(rest) = trimmed.strip_prefix("MemFree:") {
+                free_kb = parse_first_kb(rest);
+            } else if let Some(rest) = trimmed.strip_prefix("Buffers:") {
+                buffers_kb = parse_first_kb(rest).unwrap_or(0);
+            } else if let Some(rest) = trimmed.strip_prefix("Cached:") {
+                cached_kb = parse_first_kb(rest).unwrap_or(0);
+            } else if let Some(rest) = trimmed.strip_prefix("Total RAM:") {
+                total_kb = total_kb.or_else(|| parse_first_kb(rest));
+            } else if let Some(rest) = trimmed.strip_prefix("Used RAM:") {
+                used_ram_kb = parse_first_kb(rest);
+            } else if trimmed.starts_with("Dalvik Heap") {
+                dalvik_kb = parse_first_kb(trimmed).unwrap_or(dalvik_kb);
+            } else if trimmed.starts_with("Native Heap") {
+                native_kb = parse_first_kb(trimmed).unwrap_or(native_kb);
+            } else if trimmed.starts_with("GL mtrack") || trimmed.starts_with("Graphics") {
+                graphics_kb = parse_first_kb(trimmed).unwrap_or(graphics_kb);
+            }
+        }
+
+        let total_mb = total_kb
+            .map(|kb| kb / 1024)
+            .filter(|&mb| mb > 0)
+            .unwrap_or_else(|| fallback_total_mb.max(1));
+
+        let used_mb = if let Some(used_kb) = used_ram_kb {
+            (used_kb / 1024).min(total_mb)
+        } else if let (Some(tot_kb), Some(av_kb)) = (total_kb, avail_kb) {
+            tot_kb.saturating_sub(av_kb) / 1024
+        } else if let (Some(tot_kb), Some(fr_kb)) = (total_kb, free_kb) {
+            tot_kb.saturating_sub(fr_kb + buffers_kb + cached_kb) / 1024
+        } else {
+            0
+        };
+
+        (
+            used_mb,
+            total_mb,
+            dalvik_kb / 1024,
+            native_kb / 1024,
+            graphics_kb / 1024,
+        )
+    }
+
+    /// Parses `dumpsys cpuinfo` output for overall CPU utilization percentage.
+    pub fn parse_cpuinfo(output: &str) -> f32 {
+        for line in output.lines() {
+            let trimmed = line.trim();
+            if trimmed.contains("TOTAL:") {
+                if let Some(pct_part) = trimmed.split('%').next() {
+                    if let Ok(val) = pct_part.trim().parse::<f32>() {
+                        return val.clamp(0.0, 100.0);
+                    }
+                }
+            }
+        }
+        0.0
+    }
+
+    /// Parses `dumpsys battery` temperature (in tenths of Celsius).
+    pub fn parse_battery_temp(output: &str) -> f32 {
+        for line in output.lines() {
+            let trimmed = line.trim();
+            if let Some(rest) = trimmed.strip_prefix("temperature:") {
+                if let Ok(tenths) = rest.trim().parse::<f32>() {
+                    return tenths / 10.0;
+                }
+            }
+        }
+        0.0
+    }
+
+    /// Parses `dumpsys gfxinfo` frame statistics into `(fps, jank_frames)`.
+    pub fn parse_gfxinfo(output: &str) -> (f32, u32) {
+        let mut total_frames: u32 = 0;
+        let mut jank_frames: u32 = 0;
+        let mut p50_ms: Option<f32> = None;
+
+        for line in output.lines() {
+            let trimmed = line.trim();
+            if let Some(rest) = trimmed.strip_prefix("Total frames rendered:") {
+                total_frames = rest.trim().parse::<u32>().unwrap_or(0);
+            } else if let Some(rest) = trimmed.strip_prefix("Janky frames:") {
+                if let Some(num) = rest.split_whitespace().next() {
+                    jank_frames = num.parse::<u32>().unwrap_or(0);
+                }
+            } else if let Some(rest) = trimmed.strip_prefix("50th percentile:") {
+                if let Some(ms_str) = rest.trim().strip_suffix("ms") {
+                    p50_ms = ms_str.trim().parse::<f32>().ok();
+                }
+            }
+        }
+
+        let fps = if let Some(ms) = p50_ms {
+            if ms > 0.0 {
+                (1000.0 / ms.max(16.6667)).clamp(1.0, 120.0)
+            } else {
+                60.0
+            }
+        } else if total_frames > 0 {
+            let jank_ratio = (jank_frames as f32 / total_frames as f32).clamp(0.0, 1.0);
+            (60.0 * (1.0 - jank_ratio * 0.5)).clamp(1.0, 60.0)
+        } else {
+            60.0
+        };
+
+        (fps, jank_frames)
+    }
+
+    /// Builds a `PerformanceSample` from live ADB command outputs.
+    pub fn sample_from_adb_outputs(
+        meminfo: &str,
+        cpuinfo: &str,
+        battery: &str,
+        gfxinfo: &str,
+        fallback_total_mb: u64,
+    ) -> PerformanceSample {
+        let now_ms = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_millis() as u64)
+            .unwrap_or(0);
+        let (ram_used_mb, ram_total_mb, ram_dalvik_mb, ram_native_mb, ram_graphics_mb) =
+            Self::parse_meminfo(meminfo, fallback_total_mb);
+        let cpu_percent = Self::parse_cpuinfo(cpuinfo);
+        let battery_temp_c = Self::parse_battery_temp(battery);
+        let (fps, jank_frames) = Self::parse_gfxinfo(gfxinfo);
+
+        PerformanceSample {
+            timestamp_ms: now_ms,
+            cpu_percent,
+            ram_used_mb,
+            ram_total_mb,
+            ram_dalvik_mb,
+            ram_native_mb,
+            ram_graphics_mb,
+            fps,
+            jank_frames,
+            battery_temp_c,
+        }
+    }
+
+    #[cfg(test)]
     pub fn create_mock_sample(device_id: &str, ram_total_mb: u64) -> PerformanceSample {
         let now_ms = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -253,5 +423,32 @@ mod tests {
         assert_eq!(samples.len(), 120);
         assert_eq!(samples.first().unwrap().timestamp_ms, 30);
         assert_eq!(samples.last().unwrap().timestamp_ms, 149);
+    }
+
+    #[test]
+    fn test_parse_adb_profiler_outputs() {
+        let meminfo = "\
+MemTotal:        4194304 kB\n\
+MemFree:          512000 kB\n\
+MemAvailable:    2097152 kB\n\
+Dalvik Heap      262144 kB\n\
+Native Heap      131072 kB\n\
+Graphics          65536 kB\n";
+        let cpuinfo = "18.4% TOTAL: 11.2% user + 7.2% kernel\n";
+        let battery = "  level: 95\n  temperature: 334\n";
+        let gfxinfo =
+            "Total frames rendered: 100\nJanky frames: 5 (5.00%)\n50th percentile: 18ms\n";
+
+        let sample =
+            ProfilerEngine::sample_from_adb_outputs(meminfo, cpuinfo, battery, gfxinfo, 4096);
+        assert_eq!(sample.ram_total_mb, 4096);
+        assert_eq!(sample.ram_used_mb, 2048);
+        assert_eq!(sample.ram_dalvik_mb, 256);
+        assert_eq!(sample.ram_native_mb, 128);
+        assert_eq!(sample.ram_graphics_mb, 64);
+        assert!((sample.cpu_percent - 18.4).abs() < 0.01);
+        assert!((sample.battery_temp_c - 33.4).abs() < 0.01);
+        assert_eq!(sample.jank_frames, 5);
+        assert!((sample.fps - (1000.0 / 18.0)).abs() < 0.1);
     }
 }

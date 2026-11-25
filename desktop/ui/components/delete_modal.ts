@@ -48,7 +48,7 @@ export class DeleteModalComponent {
         </div>
 
         <div class="modal-actions">
-          <button type="button" class="nav-item" id="btn-del-cancel" style="padding: 8px 16px;">Cancel</button>
+          <button type="button" class="btn-secondary-action" id="btn-del-cancel">Cancel</button>
           <button type="button" class="btn-create-primary" id="btn-del-confirm" style="background-color: var(--color-danger);">
             <span>Delete Permanently</span>
           </button>

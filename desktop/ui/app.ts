@@ -23,6 +23,7 @@ import { LocationModalComponent } from './components/location_modal.js';
 import { DownloadsComponent } from './components/downloads.js';
 import { TestMatrixComponent } from './components/test_matrix.js';
 import { DeviceDetailsComponent } from './components/device_details.js';
+import { openSelectModal, openTextPromptModal } from './components/tool_modals.js';
 import { HealthHubComponent } from './components/health_hub.js';
 import { toast } from './toast.js';
 
@@ -122,7 +123,11 @@ export class App {
         },
         onManagedSetup: async () => {
           this.switchTab('settings');
-          await this.api.beginManagedSetup();
+          try {
+            await this.api.beginManagedSetup();
+          } catch (e: unknown) {
+            toast.show(`Guided setup requires the native desktop app: ${(e as { message?: string }).message || String(e)}`, 'warning');
+          }
         }
       }
     );
@@ -195,19 +200,16 @@ export class App {
       onRunMacro: async () => {
         try {
           const macros = await this.api.listMacros();
-          if (macros.length === 0) {
-            toast.show('No macros available.', 'warning');
-            return;
-          }
-          const options = macros.map((m, i) => `${i + 1}. ${m.name} (${m.steps.length} steps)`).join('\n');
-          const choice = window.prompt(`Select Macro to Execute Across Active Device Fleet:\n\n${options}\n\nEnter number (1-${macros.length}):`, '1');
-          if (!choice) return;
-          const idx = parseInt(choice.trim(), 10) - 1;
-          if (isNaN(idx) || idx < 0 || idx >= macros.length) {
-            toast.show('Invalid macro selection.', 'error');
-            return;
-          }
-          const selected = macros[idx];
+          const selected = await openSelectModal({
+            title: 'Run Gesture Macro Across Fleet',
+            description: 'Select a recorded or template macro to execute concurrently across active devices.',
+            items: macros,
+            getTitle: (m) => m.name,
+            getMeta: (m) => `${m.steps.length} steps · ${m.description || 'Fleet workflow'}`,
+            submitLabel: 'Run Across Fleet',
+            emptyMessage: 'No macros available yet.'
+          });
+          if (!selected) return;
           toast.show(`Executing "${selected.name}" across device fleet in parallel...`, 'info');
           const results = await this.api.runMacroFleet(selected.id);
           const passed = results.filter(r => r.status === 'passed').length;
@@ -615,7 +617,12 @@ export class App {
   }
 
   private async handleRename(device: Device): Promise<void> {
-    const newName = window.prompt('Enter new name for device:', device.spec.name);
+    const newName = await openTextPromptModal({
+      title: 'Rename Virtual Device',
+      label: 'Device Name',
+      defaultValue: device.spec.name,
+      submitLabel: 'Rename'
+    });
     if (!newName || !newName.trim() || newName.trim() === device.spec.name) return;
 
     toast.show('Updating device name...', 'info');
@@ -694,8 +701,13 @@ export class App {
           toast.show(`Created ${created.spec.name}`, 'success');
 
           if (autoLaunch) {
-            this.handleStart(created);
+            void this.handleStart(created);
           }
+          return created;
+        },
+        onStartCreated: (created: Device) => {
+          this.closeModal();
+          void this.handleStart(created);
         },
         onClose: () => this.closeModal()
       },
