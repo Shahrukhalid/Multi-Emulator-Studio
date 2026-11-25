@@ -88,6 +88,10 @@ export class TestMatrixComponent {
   }
 
   private render(): void {
+    const activeSuite = this.suites.find((s) => s.id === this.selectedSuiteId);
+    const activeStep = activeSuite?.steps.find((st) => st.id === this.selectedStepId) || this.suites[0]?.steps[0];
+    const activeStepTitle = activeStep ? activeStep.title : 'Ready to run matrix suite';
+
     const filteredDevices = this.devices.filter((d) => {
       if (this.activeFilter === 'passed') return d.status === 'passed';
       if (this.activeFilter === 'failed') return d.status === 'failed';
@@ -118,24 +122,24 @@ export class TestMatrixComponent {
             <button class="zoom-btn ${this.zoomLevel === 'large' ? 'active' : ''}" data-zoom="large">L</button>
           </div>
 
-          <button class="filter-pill" id="btn-broadcast-apk" title="Install an APK across all devices simultaneously" style="display: inline-flex; align-items: center; gap: 5px; height: 32px; padding: 0 10px; cursor: pointer;">
+          <button class="btn-matrix-tool" id="btn-broadcast-apk" title="Install an APK across all devices simultaneously">
             ${Icons.download}
             <span>Broadcast APK</span>
           </button>
-          <button class="filter-pill" id="btn-sync-screenshots" title="Capture simultaneous screenshots across all active devices to compare responsive layouts" style="display: inline-flex; align-items: center; gap: 5px; height: 32px; padding: 0 10px; cursor: pointer;">
+          <button class="btn-matrix-tool" id="btn-sync-screenshots" title="Capture simultaneous screenshots across all active devices to compare responsive layouts">
             ${Icons.camera}
             <span>Capture All</span>
           </button>
-          <button class="filter-pill" id="btn-export-matrix-report" title="Export complete self-contained HTML test report" style="display: inline-flex; align-items: center; gap: 5px; height: 32px; padding: 0 10px; cursor: pointer;">
+          <button class="btn-matrix-tool" id="btn-export-matrix-report" title="Export complete self-contained HTML test report">
             ${Icons.external}
             <span>Export Report</span>
           </button>
-          <button class="filter-pill" id="btn-run-fleet-macro" title="Execute a recorded or template Gesture Macro across all devices in parallel" style="display: inline-flex; align-items: center; gap: 5px; height: 32px; padding: 0 10px; cursor: pointer;">
-            <span style="color: #3b82f6; font-size: 13px;">▶</span>
+          <button class="btn-matrix-tool" id="btn-run-fleet-macro" title="Execute a recorded or template Gesture Macro across all devices in parallel">
+            <span>▶</span>
             <span>Run Macro Fleet</span>
           </button>
 
-          <button class="btn-create-primary" id="btn-run-matrix-tests" ${this.isRunning ? 'disabled style="opacity:0.7;"' : ''}>
+          <button class="btn-create-primary" id="btn-run-matrix-tests" ${this.isRunning ? 'disabled' : ''}>
             ${Icons.play}
             <span>${this.isRunning ? 'Executing Tests (Free)...' : 'Run Matrix Test (Free)'}</span>
           </button>
@@ -149,7 +153,7 @@ export class TestMatrixComponent {
           <strong>Fleet Broadcast:</strong>
           <span>Installed <code>${this.broadcastReport.package_name}</code> on ${this.broadcastReport.successful_devices}/${this.broadcastReport.total_devices} devices in ${this.broadcastReport.total_duration_ms}ms</span>
         </div>
-        <button id="btn-dismiss-broadcast" class="filter-pill" style="padding: 2px 8px; font-size: 11px;">✕</button>
+        <button id="btn-dismiss-broadcast" class="btn-matrix-tool" aria-label="Dismiss broadcast summary">✕</button>
       </div>
       ` : ''}
 
@@ -200,13 +204,13 @@ export class TestMatrixComponent {
         </aside>
 
         <!-- Main Synchronized Device Matrix Grid -->
-        <main class="matrix-grid-stage zoom-${this.zoomLevel}">
+        <section class="matrix-grid-stage zoom-${this.zoomLevel}" aria-label="Device Matrix Results">
           <div class="matrix-stage-header">
             <div style="display: flex; align-items: center; gap: 8px;">
               <span class="step-dot in_progress"></span>
-              <strong style="font-size: 14px;">Active Step: Then I tap "Sales"</strong>
+              <strong style="font-size: 14px;">Active Step: ${activeStepTitle}</strong>
             </div>
-            <span style="font-size: 12px; color: var(--text-secondary);">Unlimited parallel execution · 100% Free & Local</span>
+            <span style="font-size: 12px; color: var(--text-secondary);">Parallel execution · Local Studio Engine</span>
           </div>
 
           <div class="matrix-devices-grid">
@@ -218,7 +222,7 @@ export class TestMatrixComponent {
                   ${dev.status === 'passed' ? '✓ Passed' : dev.status === 'failed' ? '✕ Failed' : '● Running'}
                 </div>
 
-                <div class="matrix-phone-mockup">
+                <div class="matrix-phone-mockup ${dev.formFactor}">
                   <div class="matrix-phone-screen">
                     ${
                       dev.screenshot
@@ -245,14 +249,14 @@ export class TestMatrixComponent {
               )
               .join('')}
           </div>
-        </main>
+        </section>
       </div>
     `;
 
     // Filter pills
-    this.element.querySelectorAll<HTMLButtonElement>('.filter-pill').forEach((btn) => {
+    this.element.querySelectorAll<HTMLButtonElement>('.matrix-filter-pills [data-filter]').forEach((btn) => {
       btn.addEventListener('click', () => {
-        this.activeFilter = btn.dataset.filter as typeof this.activeFilter;
+        this.activeFilter = (btn.dataset.filter as typeof this.activeFilter) || 'all';
         this.render();
       });
     });
@@ -336,15 +340,38 @@ export class TestMatrixComponent {
 
   public applyReport(report: MatrixRunReport): void {
     this.isRunning = false;
-    this.devices = report.devices.map((d) => ({
-      deviceId: d.device_id,
-      deviceName: d.device_name,
-      osVersion: 'Android 15',
-      formFactor: 'phone',
-      status: d.status === 'passed' ? 'passed' : 'failed',
-      screenshot: d.latest_screenshot || undefined,
-      errorMessage: d.steps.find((s) => s.error)?.error || undefined
-    }));
+    const prevById = new Map(this.devices.map((d) => [d.deviceId, d]));
+    this.devices = report.devices.map((d) => {
+      const prev = prevById.get(d.device_id);
+      return {
+        deviceId: d.device_id,
+        deviceName: d.device_name,
+        osVersion: prev?.osVersion || 'Android Runtime',
+        formFactor: prev?.formFactor || 'phone',
+        status: d.status === 'passed' ? 'passed' : 'failed',
+        screenshot: d.latest_screenshot || undefined,
+        errorMessage: d.steps.find((s) => s.error)?.error || undefined
+      };
+    });
+
+    const firstSteps = report.devices[0]?.steps;
+    if (firstSteps && firstSteps.length > 0) {
+      const runSuite: MatrixTestSuite = {
+        id: report.suite_id || 'matrix_run',
+        name: report.suite_name || 'Matrix Run',
+        steps: firstSteps.map((s) => ({
+          id: s.step_id,
+          suite: report.suite_id || 'matrix_run',
+          title: s.step_id,
+          status: s.status === 'passed' ? 'passed' : s.status === 'failed' ? 'failed' : 'running',
+          durationMs: s.duration_ms
+        }))
+      };
+      this.suites = [runSuite];
+      this.selectedSuiteId = runSuite.id;
+      this.selectedStepId = runSuite.steps[0].id;
+    }
+
     this.render();
   }
 }

@@ -532,6 +532,15 @@ class BrowserPreviewClient implements IApiClient {
         return (await this.getHardwareProfiles()) as unknown as T;
       case 'acceleration':
         return (await this.getAcceleration()) as unknown as T;
+      case 'emulator_version':
+        return 'Android emulator preview unavailable in external browser' as unknown as T;
+      case 'runtime_preflight':
+        return {
+          ready: false,
+          version: 'Browser preview',
+          acceleration: 'Unavailable outside native desktop binary',
+          diagnostic: 'External browser preview mode — launch the native desktop app for live emulator execution.'
+        } as unknown as T;
       case 'list':
         return (await this.listDevices()) as unknown as T;
       case 'create':
@@ -800,14 +809,13 @@ class BrowserPreviewClient implements IApiClient {
     const devices = await this.listDevices();
     const dev = devices.find((d) => d.id === id);
     const ramTotal = dev?.spec.ram_mb || 4096;
-    const ramUsed = Math.round(ramTotal * 0.42);
     return {
       device_id: id,
-      cpu_percent: 14.5,
-      ram_used_mb: ramUsed,
+      cpu_percent: 0,
+      ram_used_mb: 0,
       ram_total_mb: ramTotal,
-      ram_percent: 42.0,
-      fps: 60,
+      ram_percent: 0,
+      fps: 0,
       crashes: []
     };
   }
@@ -1280,14 +1288,14 @@ class BrowserPreviewClient implements IApiClient {
   }
 
   async checkForUpdates(channel?: UpdateChannel): Promise<UpdateCheckResult> {
+    const selected = channel || 'stable';
     return {
       up_to_date: true,
       current_version: '0.1.0',
       latest_version: '0.1.0',
-      channel: channel || 'stable',
-      release_date: '2026-11-24',
-      release_notes: 'Multi-Emulator Studio v0.1.0 is currently the latest production stable release with code-signing verification.',
-      download_url: 'https://github.com/Shahrukhalid/Multi-Emulator-Studio/releases'
+      channel: selected,
+      release_date: 'Current local build',
+      release_notes: `Multi-Emulator Studio v0.1.0 (${selected} channel). Browser preview uses local metadata without fabricating remote releases.`
     };
   }
 

@@ -81,13 +81,13 @@ export class DeviceListComponent {
       <div class="toolbar-bar">
         <div class="devices-filter-pills">
           <button class="filter-pill ${this.filterStatus === 'all' ? 'active' : ''}" data-status-filter="all">
-            All (${this.devices.length})
+            All (<span id="filter-count-all">${this.devices.length}</span>)
           </button>
           <button class="filter-pill ${this.filterStatus === 'running' ? 'active' : ''}" data-status-filter="running">
-            Running (${runningCount})
+            Running (<span id="filter-count-running">${runningCount}</span>)
           </button>
           <button class="filter-pill ${this.filterStatus === 'stopped' ? 'active' : ''}" data-status-filter="stopped">
-            Stopped (${stoppedCount})
+            Stopped (<span id="filter-count-stopped">${stoppedCount}</span>)
           </button>
         </div>
 
@@ -119,7 +119,7 @@ export class DeviceListComponent {
         </button>
       </div>
 
-      <div class="device-grid" id="devices-cards-grid"></div>
+      <div class="device-grid ${this.viewMode === 'list' ? 'list-view' : ''}" id="devices-cards-grid"></div>
     `;
 
     // Filter pills
@@ -218,10 +218,15 @@ export class DeviceListComponent {
   private updateSummary(): void {
     const known = new Set(this.devices.map((device) => device.id));
     const statuses = this.statuses.filter((status) => known.has(status.id));
+    const runningCount = statuses.filter((status) => status.state === 'ready' && !status.diagnostic).length;
+    const stoppedCount = statuses.filter((status) => status.state === 'stopped' || !status.state).length;
     const counts = {
       'stat-devices': this.devices.length,
-      'stat-ready': statuses.filter((status) => status.state === 'ready' && !status.diagnostic).length,
-      'stat-queued': statuses.filter((status) => status.state === 'stopped' || !status.state).length
+      'stat-ready': runningCount,
+      'stat-queued': stoppedCount,
+      'filter-count-all': this.devices.length,
+      'filter-count-running': runningCount,
+      'filter-count-stopped': stoppedCount
     };
     for (const [id, value] of Object.entries(counts)) {
       const element = this.element.querySelector(`#${id}`);

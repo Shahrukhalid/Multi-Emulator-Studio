@@ -83,12 +83,12 @@ export class DeviceDetailsComponent {
             <div class="details-header-actions">
               ${isRunning
                 ? `<button class="btn-create-primary" id="btn-details-open">${Icons.external}<span>Open Screen</span></button>
-                   <button class="nav-item" id="btn-details-restart">${Icons.rotate}<span>Restart</span></button>
-                   <button class="nav-item danger" id="btn-details-stop"><span>Stop</span></button>`
+                   <button class="btn-secondary-action" id="btn-details-restart">${Icons.rotate}<span>Restart</span></button>
+                   <button class="btn-danger-outline" id="btn-details-stop"><span>Stop</span></button>`
                 : `<button class="btn-create-primary" id="btn-details-start">${Icons.play}<span>Start Device</span></button>`
               }
-              <button class="nav-item" id="btn-details-apk" title="Install APK">${Icons.download}</button>
-              <button class="nav-item danger" id="btn-details-delete" title="Delete Device">×</button>
+              <button class="btn-secondary-action" id="btn-details-apk" title="${isRunning ? 'Install APK' : 'Start device to install APK'}" ${!isRunning ? 'disabled' : ''}>${Icons.download}<span>APK</span></button>
+              <button class="btn-danger-outline" id="btn-details-delete" title="Delete Device" aria-label="Delete Device">${Icons.delete}</button>
             </div>
           </div>
 
@@ -134,6 +134,7 @@ export class DeviceDetailsComponent {
     this.element.querySelector('#btn-details-stop')?.addEventListener('click', () => this.callbacks.onStop(this.device));
     this.element.querySelector('#btn-details-delete')?.addEventListener('click', () => this.callbacks.onDelete(this.device));
     this.element.querySelector('#btn-details-apk')?.addEventListener('click', () => this.callbacks.onInstallApk(this.device));
+    this.element.querySelector('#btn-tab-install-apk')?.addEventListener('click', () => this.callbacks.onInstallApk(this.device));
     this.element.querySelector('#btn-scan-diagnostics')?.addEventListener('click', () => this.callbacks.onScanDiagnostics?.(this.device));
 
     this.element.querySelectorAll<HTMLButtonElement>('.btn-select-profile').forEach((btn) => {
@@ -206,12 +207,13 @@ export class DeviceDetailsComponent {
     }
 
     if (this.activeSubTab === 'apps') {
+      const isRunning = this.status?.state === 'ready';
       return `
         <div class="info-table-card">
           <h3 class="section-title">Installed Applications</h3>
-          <p class="form-helper-text">Install APK packages or manage apps directly inside the device.</p>
+          <p class="form-helper-text">${isRunning ? 'Install APK packages directly onto this running device.' : 'Start the virtual device first to install or manage APK packages.'}</p>
           <div style="margin-top: 16px;">
-            <button class="btn-create-primary" id="btn-tab-install-apk">${Icons.plus}<span>Install .apk package</span></button>
+            <button class="btn-create-primary" id="btn-tab-install-apk" ${!isRunning ? 'disabled' : ''}>${Icons.plus}<span>Install .apk package</span></button>
           </div>
         </div>
       `;
@@ -221,10 +223,9 @@ export class DeviceDetailsComponent {
       return `
         <div class="info-table-card">
           <h3 class="section-title">Device Storage & Files</h3>
-          <p class="form-helper-text">Isolated storage container at <code>${spec.name}.avd</code></p>
+          <p class="form-helper-text">Isolated AVD container: <code>${this.escapeHtml(spec.name)}.avd</code></p>
           <div class="storage-bar-wrapper" style="margin-top: 16px;">
-            <div class="storage-bar"><div class="storage-fill" style="width: 25%;"></div></div>
-            <span class="form-helper-text">2.1 GB used of ${Math.round(spec.disk_mb / 1024)} GB</span>
+            <span class="form-helper-text">Allocated Virtual Data Partition: <strong>${Math.round(spec.disk_mb / 1024)} GB</strong> (${spec.disk_mb} MB configured)</span>
           </div>
         </div>
       `;
@@ -300,18 +301,20 @@ export class DeviceDetailsComponent {
 
     // Diagnostics
     const isRunning = this.status?.state === 'ready';
-    const cpuVal = this.telemetry ? this.telemetry.cpu_percent.toFixed(1) : (isRunning ? '14.2' : '0.0');
-    const cpuBar = this.telemetry ? Math.min(100, this.telemetry.cpu_percent) : (isRunning ? 14 : 0);
-    const ramUsedVal = this.telemetry ? Math.round(this.telemetry.ram_used_mb) : (isRunning ? Math.round(spec.ram_mb * 0.42) : 0);
-    const ramBar = this.telemetry ? Math.min(100, this.telemetry.ram_percent) : (isRunning ? 42 : 0);
-    const fpsVal = this.telemetry ? this.telemetry.fps : (isRunning ? 60 : 0);
+    const liveTelemetry = isRunning ? this.telemetry : null;
+    const cpuVal = liveTelemetry ? `${liveTelemetry.cpu_percent.toFixed(1)}%` : (isRunning ? 'Scan pending' : '0.0%');
+    const cpuBar = liveTelemetry ? Math.min(100, liveTelemetry.cpu_percent) : 0;
+    const ramUsedVal = liveTelemetry ? Math.round(liveTelemetry.ram_used_mb) : 0;
+    const ramLabel = liveTelemetry ? `${ramUsedVal} MB / ${spec.ram_mb} MB` : (isRunning ? `Scan pending / ${spec.ram_mb} MB` : `0 MB / ${spec.ram_mb} MB`);
+    const ramBar = liveTelemetry ? Math.min(100, liveTelemetry.ram_percent) : 0;
+    const fpsVal = liveTelemetry ? `${liveTelemetry.fps} FPS` : (isRunning ? '—' : '0 FPS');
     const crashes = this.telemetry?.crashes || [];
 
     return `
       <div class="info-table-card">
-        <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap;">
           <h3 class="section-title">Telemetry & Diagnostics (100% Free)</h3>
-          <button class="btn-create-secondary" id="btn-scan-diagnostics" style="padding: 4px 12px; font-size: 12px;">
+          <button class="btn-secondary-action" id="btn-scan-diagnostics" ${!isRunning ? 'disabled' : ''}>
             ${Icons.rotate} <span>Scan Logcat & Telemetry</span>
           </button>
         </div>
@@ -319,18 +322,18 @@ export class DeviceDetailsComponent {
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin: 16px 0;">
           <div style="background: var(--bg-secondary); padding: 12px; border-radius: 8px; border: 1px solid var(--border-subtle);">
             <div style="font-size: 11px; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">CPU Utilization</div>
-            <div style="font-size: 20px; font-weight: 700; color: var(--text-primary); margin: 4px 0;">${cpuVal}%</div>
+            <div style="font-size: 20px; font-weight: 700; color: var(--text-primary); margin: 4px 0;">${cpuVal}</div>
             <div class="storage-bar"><div class="storage-fill" style="width: ${cpuBar}%;"></div></div>
           </div>
           <div style="background: var(--bg-secondary); padding: 12px; border-radius: 8px; border: 1px solid var(--border-subtle);">
             <div style="font-size: 11px; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">Guest Memory (RAM)</div>
-            <div style="font-size: 20px; font-weight: 700; color: var(--text-primary); margin: 4px 0;">${ramUsedVal} MB / ${spec.ram_mb} MB</div>
+            <div style="font-size: 20px; font-weight: 700; color: var(--text-primary); margin: 4px 0;">${ramLabel}</div>
             <div class="storage-bar"><div class="storage-fill" style="width: ${ramBar}%;"></div></div>
           </div>
           <div style="background: var(--bg-secondary); padding: 12px; border-radius: 8px; border: 1px solid var(--border-subtle);">
             <div style="font-size: 11px; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">Presentation Rate</div>
-            <div style="font-size: 20px; font-weight: 700; color: var(--accent-success); margin: 4px 0;">${fpsVal} FPS</div>
-            <span style="font-size: 11px; color: var(--text-secondary);">SurfaceFlinger Active</span>
+            <div style="font-size: 20px; font-weight: 700; color: var(--accent-success); margin: 4px 0;">${fpsVal}</div>
+            <span style="font-size: 11px; color: var(--text-secondary);">${isRunning ? (liveTelemetry ? 'SurfaceFlinger Sampled' : 'Click Scan to sample ADB metrics') : 'Device stopped'}</span>
           </div>
         </div>
 

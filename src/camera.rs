@@ -82,6 +82,22 @@ impl CameraEngine {
     /// Generates a valid 24-bit uncompressed RGB Windows Bitmap (BMP) in memory.
     /// This requires zero external dependencies and is natively decoded by Android and iOS.
     pub fn generate_bmp_pattern(pattern: CameraPattern, width: u32, height: u32) -> Vec<u8> {
+        Self::generate_bmp_pattern_with_payload(pattern, width, height, None)
+    }
+
+    /// Generates a pattern BMP deterministically modulated by an optional payload seed.
+    pub fn generate_bmp_pattern_with_payload(
+        pattern: CameraPattern,
+        width: u32,
+        height: u32,
+        payload: Option<&str>,
+    ) -> Vec<u8> {
+        let seed = payload
+            .unwrap_or("default")
+            .bytes()
+            .fold(0x811c_9dc5u32, |acc, b| {
+                acc.wrapping_mul(16_777_619) ^ (b as u32)
+            });
         let row_padding = (4 - ((width * 3) % 4)) % 4;
         let image_size = (width * 3 + row_padding) * height;
         let file_size = 54 + image_size;
@@ -154,14 +170,18 @@ impl CameraEngine {
                             } else {
                                 (255, 255, 255)
                             }
-                        } else if (cell_x * 7 + cell_y * 13).is_multiple_of(5) {
-                            (0, 0, 0)
                         } else {
-                            (255, 255, 255)
+                            let bit_idx = ((cell_y * 21 + cell_x) ^ (seed % 17)) & 31;
+                            if ((seed.rotate_left(cell_x) ^ bit_idx) & 1) == 0 {
+                                (0, 0, 0)
+                            } else {
+                                (255, 255, 255)
+                            }
                         }
                     }
                     CameraPattern::Barcode128 => {
-                        if (x / 8).is_multiple_of(2) {
+                        let col = x / 6;
+                        if ((seed.wrapping_add(col).wrapping_mul(31)) & 1) == 0 {
                             (0, 0, 0)
                         } else {
                             (255, 255, 255)

@@ -4,6 +4,19 @@ import { FrameScheduler, FrameMetrics, nextCaptureDelay } from '../frame_schedul
 import { LiveVideo } from '../live_video.js';
 import { Icons } from '../icons.js';
 import { toast } from '../toast.js';
+import {
+  openAudioStudioModal,
+  openCameraModal,
+  openClipboardModal,
+  openDevToolsModal,
+  openIntentStudioModal,
+  openProfilerModal,
+  openRoboCrawlModal,
+  openSelectModal,
+  openSensorsHubModal,
+  openSnapshotModal,
+  openTextPromptModal
+} from './tool_modals.js';
 
 export class PhoneViewer {
   private static scheduler = new FrameScheduler(2);
@@ -874,21 +887,13 @@ export class PhoneViewer {
       currentClip = '';
     }
 
-    const text = window.prompt(
-      'Synchronize Clipboard with Virtual Device:\n(Type text to push to device, or leave as-is to copy to host)',
-      currentClip || ''
-    );
-    if (text !== null && text !== currentClip) {
-      try {
+    openClipboardModal({
+      deviceName: this.device.spec.name,
+      initialText: currentClip || '',
+      onPushToDevice: async (text) => {
         await this.api.setClipboard(this.device.id, text);
-        toast.show('Pushed text to device clipboard', 'success');
-      } catch (err: unknown) {
-        toast.show(`Failed to set clipboard: ${(err as { message?: string }).message || String(err)}`, 'error');
       }
-    } else if (text !== null && text === currentClip && currentClip) {
-      navigator.clipboard.writeText(currentClip);
-      toast.show('Device clipboard copied to host clipboard!', 'success');
-    }
+    });
   }
 
   private async toggleMacroRecording(): Promise<void> {
@@ -912,10 +917,13 @@ export class PhoneViewer {
         return;
       }
 
-      const name = window.prompt(
-        `Recorded ${this.recordedMacroSteps.length} gesture/input steps!\nEnter a name for this Macro:`,
-        `Macro ${new Date().toLocaleTimeString()}`
-      );
+      const name = await openTextPromptModal({
+        title: 'Save Recorded Macro',
+        description: `Captured ${this.recordedMacroSteps.length} gesture/input steps on ${this.device.spec.name}.`,
+        label: 'Macro Name',
+        defaultValue: `Macro ${new Date().toLocaleTimeString()}`,
+        submitLabel: 'Save Macro'
+      });
       if (!name || !name.trim()) return;
 
       const newMacro: MacroDefinition = {
@@ -938,22 +946,17 @@ export class PhoneViewer {
   private async showPlayMacroDialog(): Promise<void> {
     try {
       const macros = await this.api.listMacros();
-      if (macros.length === 0) {
-        toast.show('No macros found.', 'warning');
-        return;
-      }
+      const selected = await openSelectModal({
+        title: `Replay Gesture Macro · ${this.device.spec.name}`,
+        description: 'Choose a saved gesture macro to execute sequentially on this device.',
+        items: macros,
+        getTitle: (m) => m.name,
+        getMeta: (m) => `${m.steps.length} steps · ${m.description || 'Saved workflow'}`,
+        submitLabel: 'Replay Macro',
+        emptyMessage: 'No macros recorded or saved yet.'
+      });
+      if (!selected) return;
 
-      const options = macros.map((m, i) => `${i + 1}. ${m.name} (${m.steps.length} steps)`).join('\n');
-      const choice = window.prompt(`Select Macro to Replay on ${this.device.spec.name}:\n\n${options}\n\nEnter number (1-${macros.length}):`, '1');
-      if (!choice) return;
-
-      const idx = parseInt(choice.trim(), 10) - 1;
-      if (isNaN(idx) || idx < 0 || idx >= macros.length) {
-        toast.show('Invalid macro selection.', 'error');
-        return;
-      }
-
-      const selected = macros[idx];
       toast.show(`Replaying "${selected.name}" on ${this.device.spec.name}...`, 'info');
       const result = await this.api.runMacro(selected.id, this.device.id);
 
@@ -969,50 +972,21 @@ export class PhoneViewer {
 
   private async showAudioDialog(): Promise<void> {
     try {
-      const state = await this.api.getAudioState(this.device.id);
-      const samples = await this.api.getAudioSamples();
-
-      const choice = window.prompt(
-        `🔊 Audio Streaming & Sound Injection (${this.device.spec.name}):\n` +
-        `Current Volume: ${state.output_volume}% (${state.muted ? 'MUTED' : 'ACTIVE'})\n\n` +
-        `Options:\n` +
-        `1. Set Volume (0 - 100)\n` +
-        `2. Toggle Mute / Unmute\n` +
-        `3. Inject Synthesized Sound Sample...\n\n` +
-        `Enter option (1, 2, or 3):`,
-        '1'
-      );
-      if (!choice) return;
-
-      if (choice.trim() === '1') {
-        const volStr = window.prompt(`Enter desired volume (0 - 100):`, String(state.output_volume));
-        if (volStr !== null) {
-          const vol = parseInt(volStr.trim(), 10);
-          if (!isNaN(vol) && vol >= 0 && vol <= 100) {
-            await this.api.setAudioState(this.device.id, vol, false);
-            toast.show(`Device volume set to ${vol}%`, 'success');
-          } else {
-            toast.show('Volume must be between 0 and 100.', 'error');
-          }
+      const [state, samples] = await Promise.all([
+        this.api.getAudioState(this.device.id),
+        this.api.getAudioSamples()
+      ]);
+      openAudioStudioModal({
+        deviceName: this.device.spec.name,
+        initialState: state,
+        samples,
+        onSetAudioState: async (volume, muted) => {
+          await this.api.setAudioState(this.device.id, volume, muted);
+        },
+        onInjectSample: async (sampleId) => {
+          await this.api.injectAudioSample(this.device.id, sampleId);
         }
-      } else if (choice.trim() === '2') {
-        const nextMuted = !state.muted;
-        await this.api.setAudioState(this.device.id, state.output_volume, nextMuted);
-        toast.show(`Device audio ${nextMuted ? 'muted' : 'unmuted'}.`, 'success');
-      } else if (choice.trim() === '3') {
-        const sampleList = samples.map((s, i) => `${i + 1}. [${s.category.toUpperCase()}] ${s.title} (${s.duration_ms}ms)`).join('\n');
-        const sChoice = window.prompt(`Select Audio Sample to Inject:\n\n${sampleList}\n\nEnter number (1-${samples.length}):`, '1');
-        if (!sChoice) return;
-        const sIdx = parseInt(sChoice.trim(), 10) - 1;
-        if (!isNaN(sIdx) && sIdx >= 0 && sIdx < samples.length) {
-          const sample = samples[sIdx];
-          toast.show(`Injecting "${sample.title}" into device audio buffer...`, 'info');
-          await this.api.injectAudioSample(this.device.id, sample.id);
-          toast.show(`Audio injection complete: "${sample.title}" played successfully!`, 'success');
-        } else {
-          toast.show('Invalid sample selection.', 'error');
-        }
-      }
+      });
     } catch (err: unknown) {
       toast.show(`Audio control error: ${(err as { message?: string }).message || String(err)}`, 'error');
     }
@@ -1020,199 +994,59 @@ export class PhoneViewer {
 
   private async showSensorsDialog(): Promise<void> {
     try {
-      const choice = window.prompt(
-        `🧬 Biometrics & Hardware Sensors Simulator Hub (${this.device.spec.name}):\n\n` +
-        `1. Biometrics: Fingerprint MATCH (Success)\n` +
-        `2. Biometrics: Fingerprint REJECT (Fail / Unmatch)\n` +
-        `3. Battery: 100% (AC Charging / Full)\n` +
-        `4. Battery: 15% (Discharging / Low Battery)\n` +
-        `5. Tilt Orientation: Flat Table (0° tilt)\n` +
-        `6. Tilt Orientation: Portrait 45° Pitch\n` +
-        `7. Tilt Orientation: Landscape 45° Roll\n` +
-        `8. Proximity Sensor: Close / Near (0.5cm)\n\n` +
-        `Enter option (1-8):`,
-        '1'
-      );
-      if (!choice) return;
-
-      switch (choice.trim()) {
-        case '1':
-          await this.api.simulateBiometrics(this.device.id, { type: 'match', finger_id: 1 });
-          toast.show('Biometrics: Sent Fingerprint Match (ID 1)', 'success');
-          break;
-        case '2':
-          await this.api.simulateBiometrics(this.device.id, { type: 'unmatch' });
-          toast.show('Biometrics: Sent Fingerprint Reject', 'warning');
-          break;
-        case '3':
-          await this.api.setBatteryState(this.device.id, {
-            capacity_percent: 100,
-            ac_plugged: true,
-            status: 'Charging',
-            health: 'Good'
-          });
-          toast.show('Battery set to 100% (AC Charging)', 'success');
-          break;
-        case '4':
-          await this.api.setBatteryState(this.device.id, {
-            capacity_percent: 15,
-            ac_plugged: false,
-            status: 'Discharging',
-            health: 'Good'
-          });
-          toast.show('Battery set to 15% (Discharging / Warning alert)', 'warning');
-          break;
-        case '5':
-          await this.api.setSensorState(this.device.id, { type: 'acceleration', x: 0, y: 9.81, z: 0 });
-          toast.show('Sensor: Flat Table orientation applied', 'success');
-          break;
-        case '6':
-          await this.api.setSensorState(this.device.id, { type: 'acceleration', x: 0, y: 6.94, z: 6.94 });
-          toast.show('Sensor: 45° Portrait tilt applied', 'success');
-          break;
-        case '7':
-          await this.api.setSensorState(this.device.id, { type: 'acceleration', x: 6.94, y: 6.94, z: 0 });
-          toast.show('Sensor: 45° Landscape roll applied', 'success');
-          break;
-        case '8':
-          await this.api.setSensorState(this.device.id, { type: 'proximity', distance_cm: 0.5 });
-          toast.show('Sensor: Proximity NEAR (0.5cm) simulated', 'success');
-          break;
-        default:
-          toast.show('Invalid sensor option.', 'error');
-      }
+      const sensorState = await this.api.getSensorState(this.device.id);
+      openSensorsHubModal({
+        deviceName: this.device.spec.name,
+        initialState: sensorState,
+        onBiometric: async (action) => {
+          await this.api.simulateBiometrics(this.device.id, action);
+        },
+        onBattery: async (battery) => {
+          await this.api.setBatteryState(this.device.id, battery);
+        },
+        onSensor: async (update) => {
+          await this.api.setSensorState(this.device.id, update);
+        }
+      });
     } catch (err: unknown) {
       toast.show(`Sensor simulation error: ${(err as { message?: string }).message || String(err)}`, 'error');
     }
   }
 
   private async showRoboCrawlDialog(): Promise<void> {
-    try {
-      const pkg = window.prompt(
-        `🤖 Autonomous Robo UI Exploration Crawler (${this.device.spec.name}):\n\n` +
-        `Enter target Android application package to crawl autonomously:`,
-        'com.android.settings'
-      );
-      if (!pkg || !pkg.trim()) return;
-
-      toast.show(`Launching Autonomous Robo Crawler on ${pkg.trim()}...`, 'info');
-      const report = await this.api.runRoboCrawl(this.device.id, {
-        package_name: pkg.trim(),
-        max_depth: 5,
-        max_actions: 20,
-        strategy: 'breadth_first',
-        throttle_ms: 300,
-        explore_inputs: true
-      });
-
-      const crashInfo = report.crashes.length > 0 ? ` ⚠️ ${report.crashes.length} crash(es) detected!` : ' No crashes detected.';
-      toast.show(
-        `Robo Crawl Finished (${report.status}): ${report.screens_discovered} screens discovered, ${report.actions_performed} UI actions executed.${crashInfo}`,
-        report.crashes.length > 0 ? 'error' : 'success'
-      );
-    } catch (err: unknown) {
-      toast.show(`Robo Crawl error: ${(err as { message?: string }).message || String(err)}`, 'error');
-    }
+    openRoboCrawlModal({
+      deviceName: this.device.spec.name,
+      onRun: (config) => this.api.runRoboCrawl(this.device.id, config)
+    });
   }
 
   private async showCameraDialog(): Promise<void> {
     try {
       const patterns = await this.api.getCameraPatterns();
-      const list = patterns.map((p, i) => `${i + 1}. ${p.title} (${p.description})`).join('\n');
-
-      const choice = window.prompt(
-        `📷 Mock Camera Feed & QR/Barcode Pattern Injector (${this.device.spec.name}):\n\n` +
-        `${list}\n\n` +
-        `Enter pattern number (1-${patterns.length}):`,
-        '2'
-      );
-      if (!choice) return;
-
-      const idx = parseInt(choice.trim(), 10) - 1;
-      if (isNaN(idx) || idx < 0 || idx >= patterns.length) {
-        toast.show('Invalid pattern selection.', 'error');
-        return;
-      }
-
-      const selected = patterns[idx];
-      let payload = selected.default_payload;
-
-      if (selected.pattern === 'qr_code') {
-        const customUrl = window.prompt(`Enter URL or Text Payload to encode in QR pattern:`, payload);
-        if (customUrl !== null) payload = customUrl;
-      }
-
-      toast.show(`Injecting "${selected.title}" into camera gallery...`, 'info');
-      await this.api.injectCameraPattern(this.device.id, selected.pattern, 'back', payload);
-      toast.show(`Camera Pattern "${selected.title}" injected successfully! Available for scanner apps.`, 'success');
+      openCameraModal({
+        deviceName: this.device.spec.name,
+        patterns,
+        onInject: async (pattern, facing, payload) => {
+          await this.api.injectCameraPattern(this.device.id, pattern, facing, payload);
+        }
+      });
     } catch (err: unknown) {
       toast.show(`Camera injection error: ${(err as { message?: string }).message || String(err)}`, 'error');
     }
   }
 
   private async showSnapshotDialog(): Promise<void> {
-    try {
-      const snapshots = await this.api.listSnapshots(this.device.id);
-
-      const listStr = snapshots.length > 0
-        ? snapshots.map((s, i) => `  [${i + 1}] "${s.name}" (${s.description}) - ${s.created_at}`).join('\n')
-        : '  (No snapshots saved yet)';
-
-      const action = window.prompt(
-        `⏱ Time-Machine Snapshots & State Checkpoints (${this.device.spec.name}):\n\n` +
-        `Saved Checkpoints:\n${listStr}\n\n` +
-        `Options:\n` +
-        `1. Quick-Save new State Checkpoint\n` +
-        `2. Quick-Restore / Rollback to Checkpoint\n` +
-        `3. Delete Checkpoint\n\n` +
-        `Enter option (1, 2, or 3):`,
-        '1'
-      );
-      if (!action) return;
-
-      if (action.trim() === '1') {
-        const name = window.prompt('Enter checkpoint name (e.g., "cart_populated", "after_login"):', `checkpoint_${Date.now()}`);
-        if (!name || !name.trim()) return;
-        const desc = window.prompt('Enter description for this checkpoint:', 'State saved during manual test verification');
-
-        toast.show(`Saving instant snapshot "${name.trim()}"...`, 'info');
-        const snap = await this.api.saveSnapshot(this.device.id, name.trim(), desc || undefined);
-        toast.show(`Snapshot "${snap.name}" checkpoint saved successfully!`, 'success');
-      } else if (action.trim() === '2') {
-        if (snapshots.length === 0) {
-          toast.show('No snapshots available to restore.', 'warning');
-          return;
-        }
-        const sChoice = window.prompt(`Select Checkpoint to Restore (1-${snapshots.length}):`, '1');
-        if (!sChoice) return;
-        const sIdx = parseInt(sChoice.trim(), 10) - 1;
-        if (isNaN(sIdx) || sIdx < 0 || sIdx >= snapshots.length) {
-          toast.show('Invalid snapshot selection.', 'error');
-          return;
-        }
-        const target = snapshots[sIdx];
-        toast.show(`Restoring device to snapshot "${target.name}"...`, 'info');
-        await this.api.loadSnapshot(this.device.id, target.name);
-        toast.show(`Device successfully rolled back to snapshot "${target.name}"!`, 'success');
-      } else if (action.trim() === '3') {
-        if (snapshots.length === 0) {
-          toast.show('No snapshots available to delete.', 'warning');
-          return;
-        }
-        const dChoice = window.prompt(`Select Checkpoint to Delete (1-${snapshots.length}):`, '1');
-        if (!dChoice) return;
-        const dIdx = parseInt(dChoice.trim(), 10) - 1;
-        if (isNaN(dIdx) || dIdx < 0 || dIdx >= snapshots.length) {
-          toast.show('Invalid selection.', 'error');
-          return;
-        }
-        const target = snapshots[dIdx];
-        await this.api.deleteSnapshot(this.device.id, target.id, target.name);
-        toast.show(`Deleted snapshot "${target.name}".`, 'info');
+    await openSnapshotModal({
+      deviceName: this.device.spec.name,
+      loadSnapshots: () => this.api.listSnapshots(this.device.id),
+      onSave: (name, description) => this.api.saveSnapshot(this.device.id, name, description),
+      onRestore: async (name) => {
+        await this.api.loadSnapshot(this.device.id, name);
+      },
+      onDelete: async (snapshotId, name) => {
+        await this.api.deleteSnapshot(this.device.id, snapshotId, name);
       }
-    } catch (err: unknown) {
-      toast.show(`Snapshot operation error: ${(err as { message?: string }).message || String(err)}`, 'error');
-    }
+    });
   }
 
   private async handleDroppedFiles(files: File[]): Promise<void> {
@@ -1320,142 +1154,32 @@ export class PhoneViewer {
   }
 
   private async showProfilerDialog(): Promise<void> {
-    try {
-      const sample = await this.api.getPerformanceSample(this.device.id);
-      const action = window.prompt(
-        `📊 Live Performance Profiler & Resource Monitor (${this.device.spec.name}):\n\n` +
-          `• CPU Usage: ${sample.cpu_percent.toFixed(1)}%\n` +
-          `• RAM Allocated: ${sample.ram_used_mb} MB / ${sample.ram_total_mb} MB (${Math.round((sample.ram_used_mb / sample.ram_total_mb) * 100)}%)\n` +
-          `    - Dalvik/ART Heap: ${sample.ram_dalvik_mb} MB\n` +
-          `    - Native Heap: ${sample.ram_native_mb} MB\n` +
-          `    - Graphics & Textures: ${sample.ram_graphics_mb} MB\n` +
-          `• Frame Rate: ${sample.fps.toFixed(1)} FPS (Jank frames: ${sample.jank_frames})\n` +
-          `• Battery Temperature: ${sample.battery_temp_c.toFixed(1)} °C\n\n` +
-          `Select an action:\n` +
-          `1. Refresh live metrics\n` +
-          `2. Export telemetry timeline trace (.CSV)\n` +
-          `3. Close`,
-        '1'
-      );
-
-      if (action === '1') {
-        void this.showProfilerDialog();
-      } else if (action === '2') {
-        const csv = await this.api.exportProfileCsv(this.device.id);
-        const blob = new Blob([csv], { type: 'text/csv' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `mes-profiler-${this.device.spec.name.toLowerCase().replace(/\s+/g, '-')}-${Date.now()}.csv`;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        URL.revokeObjectURL(url);
-        toast.show('Performance telemetry CSV exported successfully!', 'success');
-      }
-    } catch (err: unknown) {
-      toast.show(`Profiler query error: ${(err as { message?: string }).message || String(err)}`, 'error');
-    }
+    await openProfilerModal({
+      deviceName: this.device.spec.name,
+      fetchSample: () => this.api.getPerformanceSample(this.device.id),
+      exportCsv: () => this.api.exportProfileCsv(this.device.id)
+    });
   }
 
-  private async showIntentDialog(): Promise<void> {
-    try {
-      const mode = window.prompt(
-        `⚡ Deep Link & Intent Injection Studio (${this.device.spec.name}):\n\n` +
-          `1. Dispatch Deep Link (URL Scheme / Universal Link)\n` +
-          `2. Dispatch Custom Android Intent (ACTION_VIEW, SEND, custom extras)\n` +
-          `3. Simulate Push Notification (Mock FCM / Local Alert)\n\n` +
-          `Choose mode (1-3):`,
-        '1'
-      );
-      if (!mode) return;
-
-      if (mode.trim() === '1') {
-        const uri = window.prompt(
-          `Enter Deep Link URI:\n(e.g. myapp://checkout?item=101 or https://app.example.com/promo)`,
-          'myapp://home?tab=dashboard'
-        );
-        if (!uri || !uri.trim()) return;
-        const pkg = window.prompt('Optional explicit package filter (or leave empty for default):', '');
-        await this.api.dispatchDeepLink({
-          device_id: this.device.id,
-          uri: uri.trim(),
-          package: pkg?.trim() || undefined
-        });
-        toast.show(`Dispatched deep link: ${uri.trim()}`, 'success');
-      } else if (mode.trim() === '2') {
-        const action = window.prompt(
-          `Enter Intent Action (e.g. android.intent.action.VIEW, android.intent.action.SEND):`,
-          'android.intent.action.VIEW'
-        );
-        if (!action || !action.trim()) return;
-        const dataUri = window.prompt('Optional Data URI (or leave empty):', 'https://example.com');
-        const extraKey = window.prompt('Optional Extra Key (or leave empty):', 'auth_token');
-        const extraVal = extraKey ? window.prompt(`Value for ${extraKey}:`, 'test_token_2026') : null;
-
-        const extras = extraKey && extraVal ? [{ key: extraKey, value_type: 'string' as const, value: extraVal }] : [];
-        await this.api.dispatchIntent({
-          device_id: this.device.id,
-          action: action.trim(),
-          data_uri: dataUri?.trim() || undefined,
-          extras
-        });
-        toast.show(`Intent ${action.trim()} dispatched!`, 'success');
-      } else if (mode.trim() === '3') {
-        const title = window.prompt('Push Notification Title:', 'Special Offer 50% Off');
-        if (!title || !title.trim()) return;
-        const body = window.prompt('Push Notification Message Body:', 'Your cart items are reserved for the next 24 hours.');
-        if (!body || !body.trim()) return;
-
-        await this.api.simulateNotification({
-          device_id: this.device.id,
-          title: title.trim(),
-          body: body.trim(),
-          channel_id: 'marketing_alerts',
-          tag: 'mes_simulated_alert'
-        });
-        toast.show(`Simulated push notification: "${title.trim()}" posted to device!`, 'success');
-      }
-    } catch (err: unknown) {
-      toast.show(`Intent injection error: ${(err as { message?: string }).message || String(err)}`, 'error');
-    }
+  private showIntentDialog(): void {
+    openIntentStudioModal({
+      deviceId: this.device.id,
+      deviceName: this.device.spec.name,
+      onDeepLink: (req) => this.api.dispatchDeepLink(req),
+      onIntent: (req) => this.api.dispatchIntent(req),
+      onNotification: (req) => this.api.simulateNotification(req)
+    });
   }
 
   private async showDevToolsDialog(): Promise<void> {
+    const port = 9222;
     try {
-      const port = 9222;
-      toast.show(`Forwarding Chrome/WebView DevTools to tcp:${port}…`, 'info');
       await this.api.enableDevToolsForwarding(this.device.id, port);
-      const targets = await this.api.listDevToolsTargets(this.device.id, port);
-
-      const listStr =
-        targets.length > 0
-          ? targets.map((t, idx) => `${idx + 1}. [${t.type.toUpperCase()}] ${t.title} (${t.url})`).join('\n')
-          : 'No active inspectable WebViews detected.';
-
-      const choice = window.prompt(
-        `🔍 Remote WebView DevTools & WebKit Inspector (${this.device.spec.name}):\n\n` +
-          `Active DevTools forward: 127.0.0.1:${port}\n\n` +
-          `Detected WebViews:\n${listStr}\n\n` +
-          `Select target number to copy DevTools inspection URL, or type "inspect" to copy chrome://inspect link:`,
-        '1'
-      );
-
-      if (choice && choice.toLowerCase().trim() === 'inspect') {
-        if (navigator.clipboard?.writeText) {
-          await navigator.clipboard.writeText('chrome://inspect/#devices');
-          toast.show('Copied "chrome://inspect/#devices" to clipboard! Paste into Chrome/Edge.', 'success');
-        }
-      } else if (choice) {
-        const idx = parseInt(choice.trim(), 10) - 1;
-        if (!isNaN(idx) && idx >= 0 && idx < targets.length) {
-          const t = targets[idx];
-          if (navigator.clipboard?.writeText) {
-            await navigator.clipboard.writeText(t.devtools_frontend_url);
-            toast.show(`Copied DevTools URL for "${t.title}" to clipboard!`, 'success');
-          }
-        }
-      }
+      await openDevToolsModal({
+        deviceName: this.device.spec.name,
+        port,
+        fetchTargets: () => this.api.listDevToolsTargets(this.device.id, port)
+      });
     } catch (err: unknown) {
       toast.show(`DevTools bridge error: ${(err as { message?: string }).message || String(err)}`, 'error');
     }

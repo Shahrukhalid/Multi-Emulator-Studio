@@ -61,7 +61,7 @@ export class DownloadsComponent {
         <div class="setup-checklist-card">
           <div class="setup-checklist-header">
             <h3>Android SDK Components</h3>
-            <button class="nav-item" id="btn-sdk-recheck" ${this.isChecking ? 'disabled' : ''}>
+            <button class="btn-secondary-action" id="btn-sdk-recheck" ${this.isChecking ? 'disabled' : ''}>
               ${Icons.rotate}
               <span>${this.isChecking ? 'Verifying...' : 'Check Status'}</span>
             </button>
@@ -108,7 +108,7 @@ export class DownloadsComponent {
                 </span>
                 <div class="checklist-item-text">
                   <strong>Platform Tools (ADB)</strong>
-                  <span class="checklist-meta">Android Debug Bridge bridge & daemon</span>
+                  <span class="checklist-meta">Android Debug Bridge daemon & CLI</span>
                 </div>
               </div>
               <span class="badge-status ${hasAdb ? 'installed' : 'missing'}">
@@ -138,7 +138,7 @@ export class DownloadsComponent {
             <span class="readiness-icon">${isReady ? Icons.check : Icons.alert}</span>
             <div class="readiness-content">
               <strong>${isReady ? 'Your environment is ready!' : 'Environment requires setup'}</strong>
-              <p>${isReady ? 'You can now create and run Android virtual devices.' : 'Complete setup to download required images and run virtual devices.'}</p>
+              <p>${isReady ? 'You can now create and run Android virtual devices.' : this.escapeHtml(this.preflight.diagnostic || 'Complete setup to download required images and run virtual devices.')}</p>
             </div>
             ${!isReady ? `<button class="btn-create-primary" id="btn-trigger-managed-setup"><span>Run Guided Setup</span></button>` : ''}
           </div>
@@ -160,5 +160,11 @@ export class DownloadsComponent {
     this.element.querySelector('#btn-trigger-managed-setup')?.addEventListener('click', () => {
       void this.callbacks.onManagedSetup();
     });
+  }
+
+  private escapeHtml(text: string): string {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
   }
 }

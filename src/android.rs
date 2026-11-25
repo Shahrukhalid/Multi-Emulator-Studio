@@ -1270,12 +1270,12 @@ impl Engine for Android {
         timezone: Option<&str>,
     ) -> Result<()> {
         let port = self.interactive_port(d)?;
-        let _ = run(
+        run(
             self.adb_for(port)
                 .args(["emu", "geo", "fix", &lon.to_string(), &lat.to_string()]),
             None,
             Duration::from_secs(3),
-        );
+        )?;
         if let Some(tz) = timezone {
             let _ = run(
                 self.adb_for(port)
@@ -1372,13 +1372,13 @@ impl Engine for Android {
             .unwrap_or_else(|| crate::network::standard_network_profiles()[0].clone());
 
         if profile.id == "offline" {
-            let _ = run(
+            run(
                 self.adb_for(port)
                     .args(["emu", "network", "speed", "0", "0"]),
                 None,
                 Duration::from_secs(3),
-            );
-            let _ = run(
+            )?;
+            run(
                 self.adb_for(port).args([
                     "shell",
                     "cmd",
@@ -1388,9 +1388,9 @@ impl Engine for Android {
                 ]),
                 None,
                 Duration::from_secs(3),
-            );
+            )?;
         } else {
-            let _ = run(
+            run(
                 self.adb_for(port).args([
                     "shell",
                     "cmd",
@@ -1400,19 +1400,19 @@ impl Engine for Android {
                 ]),
                 None,
                 Duration::from_secs(3),
-            );
-            let _ = run(
+            )?;
+            run(
                 self.adb_for(port)
                     .args(["emu", "network", "speed", &profile.speed_preset]),
                 None,
                 Duration::from_secs(3),
-            );
-            let _ = run(
+            )?;
+            run(
                 self.adb_for(port)
                     .args(["emu", "network", "delay", &profile.delay_preset]),
                 None,
                 Duration::from_secs(3),
-            );
+            )?;
         }
         Ok(())
     }
@@ -1429,12 +1429,12 @@ impl Engine for Android {
     fn set_clipboard(&mut self, d: &Device, text: &str) -> Result<()> {
         let port = self.interactive_port(d)?;
         let escaped = text.replace('"', "\\\"");
-        let _ = run(
+        run(
             self.adb_for(port)
                 .args(["shell", "cmd", "clipboard", "set-text", &escaped]),
             None,
             Duration::from_secs(3),
-        );
+        )?;
         Ok(())
     }
     fn get_clipboard(&mut self, d: &Device) -> Result<String> {
@@ -1453,7 +1453,7 @@ impl Engine for Android {
         } else {
             (volume * 15 / 100).clamp(0, 15)
         };
-        let _ = run(
+        run(
             self.adb_for(port).args([
                 "shell",
                 "media",
@@ -1465,7 +1465,7 @@ impl Engine for Android {
             ]),
             None,
             Duration::from_secs(3),
-        );
+        )?;
         Ok(())
     }
     fn inject_audio_sample(&mut self, d: &Device, sample_id: &str) -> Result<()> {
@@ -1473,7 +1473,7 @@ impl Engine for Android {
         let wav = crate::audio::AudioEngine::generate_wav_sample(sample_id);
         let tmp = self.home.join(format!("sample_{sample_id}.wav"));
         fs::write(&tmp, &wav)?;
-        let _ = run(
+        let push_res = run(
             self.adb_for(port).args([
                 "push",
                 tmp.to_string_lossy().as_ref(),
@@ -1483,6 +1483,7 @@ impl Engine for Android {
             Duration::from_secs(5),
         );
         let _ = fs::remove_file(tmp);
+        push_res?;
         Ok(())
     }
     fn simulate_biometrics(
@@ -1493,33 +1494,33 @@ impl Engine for Android {
         let port = self.interactive_port(d)?;
         match action {
             crate::sensor::BiometricAction::Match { finger_id } => {
-                let _ = run(
+                run(
                     self.adb_for(port)
                         .args(["emu", "finger", "touch", &finger_id.to_string()]),
                     None,
                     Duration::from_secs(3),
-                );
+                )?;
             }
             crate::sensor::BiometricAction::Unmatch => {
-                let _ = run(
+                run(
                     self.adb_for(port).args(["emu", "finger", "touch", "9999"]),
                     None,
                     Duration::from_secs(3),
-                );
+                )?;
             }
             crate::sensor::BiometricAction::Enroll { enrolled } => {
                 if enrolled {
-                    let _ = run(
+                    run(
                         self.adb_for(port).args(["emu", "finger", "touch", "1"]),
                         None,
                         Duration::from_secs(3),
-                    );
+                    )?;
                 } else {
-                    let _ = run(
+                    run(
                         self.adb_for(port).args(["emu", "finger", "remove", "1"]),
                         None,
                         Duration::from_secs(3),
-                    );
+                    )?;
                 }
             }
         }
@@ -1528,29 +1529,29 @@ impl Engine for Android {
     fn set_battery_state(&mut self, d: &Device, state: crate::sensor::BatteryState) -> Result<()> {
         let port = self.interactive_port(d)?;
         let cap = state.capacity.clamp(0, 100).to_string();
-        let _ = run(
+        run(
             self.adb_for(port).args(["emu", "power", "capacity", &cap]),
             None,
             Duration::from_secs(3),
-        );
+        )?;
         let ac = if state.charging { "on" } else { "off" };
-        let _ = run(
+        run(
             self.adb_for(port).args(["emu", "power", "ac", ac]),
             None,
             Duration::from_secs(3),
-        );
-        let _ = run(
+        )?;
+        run(
             self.adb_for(port)
                 .args(["emu", "power", "status", &state.status]),
             None,
             Duration::from_secs(3),
-        );
-        let _ = run(
+        )?;
+        run(
             self.adb_for(port)
                 .args(["emu", "power", "health", &state.health]),
             None,
             Duration::from_secs(3),
-        );
+        )?;
         Ok(())
     }
     fn set_sensor_state(&mut self, d: &Device, update: crate::sensor::SensorUpdate) -> Result<()> {
@@ -1558,39 +1559,39 @@ impl Engine for Android {
         match update {
             crate::sensor::SensorUpdate::Accelerometer { x, y, z } => {
                 let val = format!("{x}:{y}:{z}");
-                let _ = run(
+                run(
                     self.adb_for(port)
                         .args(["emu", "sensor", "set", "acceleration", &val]),
                     None,
                     Duration::from_secs(3),
-                );
+                )?;
             }
             crate::sensor::SensorUpdate::Gyroscope { x, y, z } => {
                 let val = format!("{x}:{y}:{z}");
-                let _ = run(
+                run(
                     self.adb_for(port)
                         .args(["emu", "sensor", "set", "gyroscope", &val]),
                     None,
                     Duration::from_secs(3),
-                );
+                )?;
             }
             crate::sensor::SensorUpdate::Proximity { distance_cm } => {
                 let val = distance_cm.to_string();
-                let _ = run(
+                run(
                     self.adb_for(port)
                         .args(["emu", "sensor", "set", "proximity", &val]),
                     None,
                     Duration::from_secs(3),
-                );
+                )?;
             }
             crate::sensor::SensorUpdate::Light { lux } => {
                 let val = lux.to_string();
-                let _ = run(
+                run(
                     self.adb_for(port)
                         .args(["emu", "sensor", "set", "light", &val]),
                     None,
                     Duration::from_secs(3),
-                );
+                )?;
             }
         }
         Ok(())
@@ -1600,22 +1601,25 @@ impl Engine for Android {
         d: &Device,
         pattern: crate::camera::CameraPattern,
         _facing: crate::camera::CameraFacing,
-        _payload: Option<&str>,
+        payload: Option<&str>,
     ) -> Result<()> {
         let port = self.interactive_port(d)?;
-        let bytes = crate::camera::CameraEngine::generate_bmp_pattern(pattern, 1280, 720);
+        let bytes = crate::camera::CameraEngine::generate_bmp_pattern_with_payload(
+            pattern, 1280, 720, payload,
+        );
         let temp_dir = std::env::temp_dir();
         let local_path = temp_dir.join(format!("mock_camera_{}.bmp", d.id));
         std::fs::write(&local_path, &bytes)?;
 
         let target_remote = "/sdcard/DCIM/Camera/injected_test_pattern.bmp";
-        let _ = run(
+        let push_res = run(
             self.adb_for(port)
                 .args(["push", &local_path.to_string_lossy(), target_remote]),
             None,
             Duration::from_secs(5),
         );
         let _ = std::fs::remove_file(&local_path);
+        push_res?;
 
         let _ = run(
             self.adb_for(port).args([
@@ -1635,34 +1639,34 @@ impl Engine for Android {
     fn snapshot_save(&mut self, d: &Device, name: &str) -> Result<()> {
         let port = self.interactive_port(d)?;
         let sanitized = crate::snapshot::SnapshotManager::sanitize_name(name)?;
-        let _ = run(
+        run(
             self.adb_for(port)
                 .args(["emu", "avd", "snapshot", "save", &sanitized]),
             None,
             Duration::from_secs(10),
-        );
+        )?;
         Ok(())
     }
     fn snapshot_load(&mut self, d: &Device, name: &str) -> Result<()> {
         let port = self.interactive_port(d)?;
         let sanitized = crate::snapshot::SnapshotManager::sanitize_name(name)?;
-        let _ = run(
+        run(
             self.adb_for(port)
                 .args(["emu", "avd", "snapshot", "load", &sanitized]),
             None,
             Duration::from_secs(10),
-        );
+        )?;
         Ok(())
     }
     fn snapshot_delete(&mut self, d: &Device, name: &str) -> Result<()> {
         let port = self.interactive_port(d)?;
         let sanitized = crate::snapshot::SnapshotManager::sanitize_name(name)?;
-        let _ = run(
+        run(
             self.adb_for(port)
                 .args(["emu", "avd", "snapshot", "delete", &sanitized]),
             None,
             Duration::from_secs(5),
-        );
+        )?;
         Ok(())
     }
     fn push_file(
@@ -1718,9 +1722,56 @@ impl Engine for Android {
 
         Ok(format!("Pushed '{file_name}' to '{target_remote}'"))
     }
+    fn dump_ui_hierarchy(&mut self, d: &Device) -> Result<String> {
+        let port = self.interactive_port(d)?;
+        run(
+            self.adb_for(port).args([
+                "shell",
+                "uiautomator",
+                "dump",
+                "/sdcard/mes_window_dump.xml",
+            ]),
+            None,
+            Duration::from_secs(5),
+        )?;
+        run(
+            self.adb_for(port)
+                .args(["shell", "cat", "/sdcard/mes_window_dump.xml"]),
+            None,
+            Duration::from_secs(3),
+        )
+    }
     fn get_performance_sample(&mut self, d: &Device) -> Result<crate::profiler::PerformanceSample> {
-        Ok(crate::profiler::ProfilerEngine::create_mock_sample(
-            &d.id.to_string(),
+        let port = self.interactive_port(d)?;
+        let meminfo = run(
+            self.adb_for(port).args(["shell", "cat", "/proc/meminfo"]),
+            None,
+            Duration::from_secs(3),
+        )?;
+        let cpuinfo = run(
+            self.adb_for(port).args(["shell", "dumpsys", "cpuinfo"]),
+            None,
+            Duration::from_secs(3),
+        )
+        .unwrap_or_default();
+        let battery = run(
+            self.adb_for(port).args(["shell", "dumpsys", "battery"]),
+            None,
+            Duration::from_secs(3),
+        )
+        .unwrap_or_default();
+        let gfxinfo = run(
+            self.adb_for(port).args(["shell", "dumpsys", "gfxinfo"]),
+            None,
+            Duration::from_secs(3),
+        )
+        .unwrap_or_default();
+
+        Ok(crate::profiler::ProfilerEngine::sample_from_adb_outputs(
+            &meminfo,
+            &cpuinfo,
+            &battery,
+            &gfxinfo,
             d.spec.ram_mb as u64,
         ))
     }
@@ -1793,10 +1844,12 @@ impl Engine for Android {
     }
     fn list_devtools_targets(
         &mut self,
-        _d: &Device,
+        d: &Device,
         local_port: u16,
     ) -> Result<Vec<crate::devtools::DevToolsTarget>> {
-        Ok(crate::devtools::DevToolsBridge::mock_targets(local_port))
+        let _port = self.interactive_port(d)?;
+        crate::devtools::DevToolsBridge::fetch_targets(local_port)
+            .map_err(crate::Error::Unavailable)
     }
 }
 impl Drop for Android {

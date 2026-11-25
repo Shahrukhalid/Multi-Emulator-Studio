@@ -1,5 +1,6 @@
 import { HostInfo, SdkInfo, NetworkReport, SetupStatus, QaReport, UpdateChannel, UpdateCheckResult } from '../types.js';
 import { ManagedSetupFlow } from '../managed_setup_flow.js';
+import { openConfirmModal } from './tool_modals.js';
 
 export interface SettingsCallbacks {
   onRunQa: () => Promise<QaReport>;
@@ -28,7 +29,7 @@ export class SettingsComponent {
   private networkReport: NetworkReport | null;
   private callbacks: SettingsCallbacks;
 
-  private currentTheme: 'system' | 'dark' | 'light' = 'dark';
+  private currentTheme: 'system' | 'dark' | 'light' = 'system';
   private developerMode = false;
   private updateChannel: UpdateChannel = 'stable';
   private checkingUpdates = false;
@@ -127,12 +128,12 @@ export class SettingsComponent {
       ${this.connected && this.dataDir.endsWith('com.nexonic.multiemulatorstudio.qa') ? `<div class="settings-card">
         <h3 class="settings-card-title">Native runtime self-test</h3>
         <p class="form-helper-text">Boot two disposable Android devices, test simultaneous screen capture, check Google Play and YouTube, sample H.264 encoder output, and verify independent shutdown. Stop all other running emulators first. Existing stopped profiles are preserved. May take several minutes.</p>
-        <button class="nav-item" id="qa-run" ${this.qaRunning || this.installing ? 'disabled' : ''}>${this.qaRunning ? 'Running native checks…' : 'Run two-device test'}</button>
+        <button class="btn-secondary-action" id="qa-run" ${this.qaRunning || this.installing ? 'disabled' : ''}>${this.qaRunning ? 'Running native checks…' : 'Run two-device test'}</button>
         <pre id="qa-report" style="white-space:pre-wrap;max-height:260px;overflow:auto" role="status"></pre>
         <div id="qa-evidence-panel" hidden>
           <label class="form-helper-text" for="qa-evidence">Runtime report (JSON, for troubleshooting; not a release attestation)</label>
           <textarea id="qa-evidence" readonly rows="6" class="form-text-input" style="width:100%;user-select:text;"></textarea>
-          <button class="nav-item" id="qa-copy">Copy report</button>
+          <button class="btn-secondary-action" id="qa-copy">Copy report</button>
           <span id="qa-copy-status" role="status" class="form-helper-text"></span>
         </div>
       </div>` : ''}
@@ -142,10 +143,10 @@ export class SettingsComponent {
         <p class="form-helper-text">No Android Studio or Java installation required. Download official Android tools, a private Java runtime and Android 14 Google Play image once. Internet and at least 12 GB free space required.</p>
         <p class="form-helper-text">Review Google's Android SDK terms at developer.android.com/studio/terms. The package installer will show any additional required license prompts below.</p>
         <label><input id="managed-consent" type="checkbox" ${this.installing ? 'disabled' : ''}> I have reviewed and agree to the Android SDK terms for permitted use.</label>
-        <div><button class="nav-item" id="managed-start" disabled>Set up Android automatically</button></div>
+        <div><button class="btn-secondary-action" id="managed-start" disabled>Set up Android automatically</button></div>
         <p id="managed-result" role="status" class="form-helper-text"></p>
         <pre id="managed-output" hidden tabindex="0" style="max-height:260px;overflow:auto;white-space:pre-wrap;"></pre>
-        <div id="managed-actions" hidden><button id="managed-yes" class="nav-item" disabled>Accept displayed license / continue</button><button id="managed-no" class="nav-item" disabled>Decline</button><button id="managed-cancel" class="nav-item">Cancel</button></div>
+        <div id="managed-actions" hidden><button id="managed-yes" class="btn-secondary-action" disabled>Accept displayed license / continue</button><button id="managed-no" class="btn-secondary-action" disabled>Decline</button><button id="managed-cancel" class="btn-secondary-action">Cancel</button></div>
       </div>` : ''}
 
       <!-- Section 1: Appearance & Storage -->
@@ -181,8 +182,8 @@ export class SettingsComponent {
         <div class="setting-row">
           <label for="setting-sdk-input">Android SDK directory</label>
           <input class="form-text-input" id="setting-sdk-input" value="${this.escapeHtml(this.sdkDir)}" placeholder="Path to installed official Android SDK" ${this.connected || this.installing ? 'readonly' : ''} />
-          <button class="nav-item" id="btn-connect-sdk" ${this.connected || this.installing ? 'disabled' : ''}>${this.connected ? 'Connected' : 'Connect SDK'}</button>
-          <button class="nav-item" id="btn-sdk-browse" ${this.connected || this.installing ? 'disabled' : ''}>Browse…</button>
+          <button class="btn-secondary-action" id="btn-connect-sdk" ${this.connected || this.installing ? 'disabled' : ''}>${this.connected ? 'Connected' : 'Connect SDK'}</button>
+          <button class="btn-secondary-action" id="btn-sdk-browse" ${this.connected || this.installing ? 'disabled' : ''}>Browse…</button>
         </div>
       </div>
 
@@ -238,7 +239,7 @@ export class SettingsComponent {
               ${this.installedImagesCount} compatible system image(s) installed and ready.
             </div>
           </div>
-          <button class="nav-item" id="btn-rescan-sdk" style="padding: 6px 12px; font-size: 12px; border: 1px solid var(--border-subtle);">
+          <button class="btn-secondary-action" id="btn-rescan-sdk">
             Check Toolchain
           </button>
         </div>
@@ -258,7 +259,7 @@ export class SettingsComponent {
             <input type="checkbox" id="runtime-license-confirm" ${this.installing ? 'disabled' : ''} />
             I have reviewed and accepted the required SDK licenses using the official SDK Manager.
           </label>
-          <button class="nav-item" id="btn-install-runtime" disabled style="margin-top:8px;">
+          <button class="btn-secondary-action" id="btn-install-runtime" disabled style="margin-top:8px;">
             ${this.installing ? 'Downloading official packages…' : this.connected ? 'Install Google Play image' : 'Install Android runtime'}
           </button>
           <p id="runtime-install-result" role="status" class="form-helper-text"></p>
@@ -291,7 +292,7 @@ export class SettingsComponent {
           </div>
 
           <div style="display: flex; gap: 8px;">
-            <button class="nav-item" id="btn-dev-inspect-logs" style="padding: 6px 12px; font-size: 12px; border: 1px solid var(--border-subtle);">
+            <button class="btn-secondary-action" id="btn-dev-inspect-logs">
               Inspect Logcat Output
             </button>
           </div>
@@ -336,7 +337,7 @@ export class SettingsComponent {
         </div>
 
         <div style="margin-top: 16px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
-          <button class="nav-item" id="btn-check-updates" ${this.checkingUpdates ? 'disabled' : ''} style="padding: 6px 14px; font-size: 12px; border: 1px solid var(--border-subtle); display: inline-flex; align-items: center; gap: 6px;">
+          <button class="btn-secondary-action" id="btn-check-updates" ${this.checkingUpdates ? 'disabled' : ''}>
             ${this.checkingUpdates ? 'Checking for updates…' : 'Check for Updates'}
           </button>
           <span id="update-check-status" style="font-size: 12px; color: var(--text-secondary);">
@@ -422,7 +423,12 @@ export class SettingsComponent {
     });
     this.element.querySelector('#qa-run')?.addEventListener('click', async () => {
       if (this.qaRunning || this.installing) return;
-      if (!window.confirm('Start two temporary QA devices? Close other emulators first. The test will remove only the devices it creates.')) return;
+      const confirmed = await openConfirmModal({
+        title: 'Run Two-Device QA Self-Test',
+        message: 'Start two temporary QA devices? Close other emulators first. The test will remove only the devices it creates.',
+        confirmLabel: 'Run QA Test'
+      });
+      if (!confirmed) return;
       this.qaRunning = true;
       this.qaEvidence = '';
       this.qaReport = 'Testing native runtime; this may take several minutes…';

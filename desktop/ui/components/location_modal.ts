@@ -89,7 +89,7 @@ export class LocationModalComponent {
         </div>
 
         <div class="modal-actions">
-          <button type="button" class="nav-item" id="btn-loc-cancel" style="padding: 8px 16px;">Cancel</button>
+          <button type="button" class="btn-secondary-action" id="btn-loc-cancel">Cancel</button>
           <button type="button" class="btn-create-primary" id="btn-loc-submit">
             <span>Apply Location</span>
           </button>

@@ -10,7 +10,7 @@ impl HtmlReportGenerator {
         crashes: Option<&[ParsedCrash]>,
         fleet: Option<&BroadcastInstallReport>,
     ) -> String {
-        let timestamp = chrono_like_timestamp();
+        let timestamp = crate::snapshot::utc_timestamp_iso();
         let pass_rate = if matrix.total_devices > 0 {
             (matrix.passed_devices as f64 / matrix.total_devices as f64) * 100.0
         } else {
@@ -330,16 +330,6 @@ fn url_encode(s: &str) -> String {
         }
     }
     encoded
-}
-
-fn chrono_like_timestamp() -> String {
-    let dur = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default();
-    let secs = dur.as_secs();
-    let days = secs / 86400;
-    // Simple year-month-day approximation for self-contained report without external chrono crate
-    format!("Epoch Day {} (+{}s)", days, secs % 86400)
 }
 
 #[cfg(test)]
