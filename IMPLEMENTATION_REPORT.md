@@ -1,7 +1,7 @@
 # Multi-Emulator Studio — Commercial UI Implementation Report
 
 **Milestone**: M2 Commercial UI Track & Integration  
-**Branch**: `feature/antigravity-ui`  
+**Branch**: `feature/commercial-ui`  
 **Base Commit**: `24798b3` (`origin/milestone/m2-verification`)  
 **Author**: Shahrukh Khalid `<90670731+Shahrukhalid@users.noreply.github.com>`  
 **Status**: Verified & Ready for Integration  
@@ -22,7 +22,7 @@ All backend operations, SQLite persistence models, instance identities, resource
 |---|---|
 | **Base Branch** | `origin/milestone/m2-verification` (PR #3) |
 | **Base Commit** | `24798b394d587a479d59f0c0aa1bedcfd9da7935` |
-| **Feature Branch** | `feature/antigravity-ui` |
+| **Feature Branch** | `feature/commercial-ui` |
 | **Target PR Branch** | `milestone/m2-verification` (draft PR, never `main`) |
 | **Backend Invariance** | Zero changes to Rust files (`src/android.rs`, `src/storage.rs`, etc.), SQLite models, or IPC contracts |
 | **Authorship** | 100% authored and committed by **Shahrukh Khalid**; zero AI trailers or attribution tags |

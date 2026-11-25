@@ -25,12 +25,34 @@ fn setup_error(message: &str) -> ApiError {
     }
 }
 
+fn is_qa_identifier(identifier: &str) -> bool {
+    identifier == "com.nexonic.multiemulatorstudio.qa"
+}
+
+fn is_apk_file_path(path: &std::path::Path) -> bool {
+    path.is_file()
+        && path
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("apk"))
+}
+
+fn requires_image_guard(request: &Request) -> bool {
+    matches!(
+        request,
+        Request::Create { .. } | Request::CloneProfile { .. }
+    )
+}
+
+fn is_expendable_request(request: &Request) -> bool {
+    matches!(request, Request::Screen { .. })
+}
+
 #[tauri::command]
 async fn qa_runtime_check(
     app: tauri::AppHandle,
     state: State<'_, Shared>,
 ) -> Result<multi_emulator_core::runtime_qa::QaReport, ApiError> {
-    if app.config().identifier != "com.nexonic.multiemulatorstudio.qa" {
+    if !is_qa_identifier(&app.config().identifier) {
         return Err(setup_error(
             "Runtime self-test is available only in the isolated QA build",
         ));
@@ -188,16 +210,15 @@ async fn connect(
 ) -> Result<(), ApiError> {
     // A separately identified QA app intentionally ignores a machine-wide SDK.
     // Production builds retain discovery and existing profile compatibility.
-    let sdk_root =
-        if app.config().identifier == "com.nexonic.multiemulatorstudio.qa" && sdk_root.is_none() {
-            let data = app
-                .path()
-                .app_local_data_dir()
-                .map_err(|e| setup_error(&e.to_string()))?;
-            Some(multi_emulator_core::managed_sdk::managed_root(&data))
-        } else {
-            sdk_root
-        };
+    let sdk_root = if is_qa_identifier(&app.config().identifier) && sdk_root.is_none() {
+        let data = app
+            .path()
+            .app_local_data_dir()
+            .map_err(|e| setup_error(&e.to_string()))?;
+        Some(multi_emulator_core::managed_sdk::managed_root(&data))
+    } else {
+        sdk_root
+    };
     let s = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
         let setup = MANAGED_SETUP
@@ -348,10 +369,7 @@ async fn dispatch(
         if QA_RUNNING.try_lock().is_err() {
             return Err(setup_error("Runtime self-test is running"));
         }
-        let _image_guard = if matches!(
-            &request,
-            Request::Create { .. } | Request::CloneProfile { .. }
-        ) {
+        let _image_guard = if requires_image_guard(&request) {
             Some(IMAGE_INSTALL.try_lock().map_err(|_| ApiError {
                 code: "conflict",
                 message: "Wait for Google Play image installation to finish".into(),
@@ -360,7 +378,7 @@ async fn dispatch(
             None
         };
         // Screen refresh is expendable; never queue it behind a lifecycle command.
-        let mut guard = if matches!(&request, Request::Screen { .. }) {
+        let mut guard = if is_expendable_request(&request) {
             s.try_lock().map_err(|_| ApiError {
                 code: "unavailable",
                 message: "Device controller busy; retrying screen refresh".into(),
@@ -402,11 +420,7 @@ async fn pick_apk(app: tauri::AppHandle) -> Result<Option<PathBuf>, String> {
             return Ok(None);
         };
         let path = selected.into_path().map_err(|e| e.to_string())?;
-        if !path.is_file()
-            || !path
-                .extension()
-                .is_some_and(|ext| ext.eq_ignore_ascii_case("apk"))
-        {
+        if !is_apk_file_path(&path) {
             return Err("Select a local APK file".into());
         }
         Ok(Some(path))
@@ -479,4 +493,69 @@ fn main() {
         ])
         .run(tauri::generate_context!())
         .expect("desktop initialization failed");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn setup_error_uses_conflict_code() {
+        let err = setup_error("busy");
+        assert_eq!(err.code, "conflict");
+        assert_eq!(err.message, "busy");
+    }
+
+    #[test]
+    fn qa_identifier_check_is_strict() {
+        assert!(is_qa_identifier("com.nexonic.multiemulatorstudio.qa"));
+        assert!(!is_qa_identifier("com.nexonic.multiemulatorstudio"));
+        assert!(!is_qa_identifier(""));
+    }
+
+    #[test]
+    fn apk_file_validation_requires_existing_apk_extension() {
+        let dir = std::env::temp_dir().join(format!("mes_desktop_test_{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&dir);
+
+        let valid_apk = dir.join("app-debug.APK");
+        std::fs::write(&valid_apk, b"PK\x03\x04").unwrap();
+        assert!(is_apk_file_path(&valid_apk));
+
+        let wrong_ext = dir.join("notes.txt");
+        std::fs::write(&wrong_ext, b"hello").unwrap();
+        assert!(!is_apk_file_path(&wrong_ext));
+
+        let missing = dir.join("missing.apk");
+        assert!(!is_apk_file_path(&missing));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn dispatch_lock_policy_classifies_requests() {
+        let create_req: Request = serde_json::from_str(
+            r#"{"action":"create","spec":{"name":"PixelTest","image":"system-images;android-34;google_apis_playstore;x86_64","hardware_profile":"pixel_6","ram_mb":4096,"cores":4,"width":1080,"height":2400,"disk_mb":8192,"locale":"en-US"}}"#,
+        )
+        .unwrap();
+        let screen_req: Request = serde_json::from_str(
+            r#"{"action":"screen","id":"00000000-0000-0000-0000-000000000001"}"#,
+        )
+        .unwrap();
+
+        assert!(requires_image_guard(&create_req));
+        assert!(!requires_image_guard(&screen_req));
+        assert!(is_expendable_request(&screen_req));
+        assert!(!is_expendable_request(&create_req));
+    }
+
+    #[test]
+    fn ipc_requests_deserialize_expected_variants() {
+        let preflight: Request = serde_json::from_str(r#"{"action":"runtime_preflight"}"#).unwrap();
+        assert!(matches!(preflight, Request::RuntimePreflight));
+
+        let updates: Request =
+            serde_json::from_str(r#"{"action":"check_updates","channel":"beta"}"#).unwrap();
+        assert!(matches!(updates, Request::CheckUpdates { .. }));
+    }
 }

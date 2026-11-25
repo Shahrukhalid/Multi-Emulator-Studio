@@ -1,6 +1,6 @@
 # Multi-Emulator Studio — Commercial UI Release Report
 
-**Branch:** `feature/antigravity-ui`  
+**Branch:** `feature/commercial-ui`  
 **Target:** `milestone/m2-verification` (PR #3)  
 **Author:** Shahrukh Khalid <90670731+Shahrukhalid@users.noreply.github.com>  
 **Status:** Verification Complete — Ready for Integration  
